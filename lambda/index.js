@@ -6,15 +6,15 @@ var dynamodb = new AWS.DynamoDB({
     region: config.dynamo.region
 });
 
-const TABLE_NAME = config.dynamo.tableName;
+var TABLE_NAME = config.dynamo.tableName;
 
 exports.handler = function (event, context) {
-    const today = new Date();
+    var today = new Date();
     this.processEvents(event, context, dynamodb, today);
 }
 
 exports.processEvents = function (event, context, dynamo, date) {
-    const job = { started: 0, completed: 0, total: event.Records.length };
+    var job = { started: 0, completed: 0, total: event.Records.length };
 
     var mapLimit = async.mapLimit;
 
@@ -31,8 +31,8 @@ exports.processEvents = function (event, context, dynamo, date) {
 
 function putItemToDynamo(dynamo, date, record, callback) {
 
-    const job = this;
-    const jobId = ++job.started;
+    var job = this;
+    var jobId = ++job.started;
 
     console.log('Process job ' + jobId + ' in ' + record.kinesis.sequenceNumber);
 
