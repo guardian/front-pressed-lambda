@@ -1,4 +1,11 @@
-var message = {
+var messageWithoutError = {
+    status: "success",
+    front: "myFront",
+    isLive: false,
+    message: "message"
+}
+
+var messageWithError = {
     status: "error",
     front: "myFront",
     isLive: false,
@@ -6,10 +13,20 @@ var message = {
 }
 
 module.exports = {
-    Records: [{
-        kinesis: {
-            data: JSON.stringify(message).toString('base64'),
-            sequenceNumber: 0
-        }
-    }]
+    withoutError: {
+        Records: [{
+            kinesis: {
+                data: JSON.stringify(messageWithoutError).toString('base64'),
+                sequenceNumber: 0
+            }
+        }]
+    },
+    withError: {
+        Records: [{
+            kinesis: {
+                data: JSON.stringify(messageWithError).toString('base64'),
+                sequenceNumber: 0
+            }
+        }]
+    }
 };
