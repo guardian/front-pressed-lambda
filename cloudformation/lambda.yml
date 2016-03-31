@@ -41,30 +41,46 @@ Resources:
                           Service:
                               - lambda.amazonaws.com
                       Action: "sts:AssumeRole"
+            Path: /
+    KinesisPolicy:
+        Type: AWS::IAM::Policy
+        Properties:
+            PolicyName: consumeKinesis
+            PolicyDocument:
+                Statement:
+                    -   Effect: "Allow"
+                        Action:
+                            - "kinesis:GetRecords"
+                            - "kinesis:GetShardIterator"
+                            - "kinesis:DescribeStream"
+                            - "kinesis:ListStreams"
+                        Resource:
+                            -
+                                Ref: "EventSourceKinesisArn"
+            Roles:
+                - Ref: "ExecutionRole"
+
     DynamoDBPolicy:
         Type: AWS::IAM::Policy
         Properties:
             PolicyName: DynamoDBPolicy
             PolicyDocument:
-                Version: 2012-10-17
+                Version: "2012-10-17"
                 Statement:
-                    -
-                        Effect: "Allow"
+                    -   Effect: "Allow"
                         Action:
-                            - "dynamodb:GetItem"
                             - "dynamodb:PutItem"
                             - "dynamodb:UpdateItem"
                         Resource:
-                            -
-                                Fn::Join:
-                                     - ""
-                                     -
-                                         - "arn:aws:dynamodb:"
-                                         - Ref: "AWS::Region"
-                                         - ":"
-                                         - Ref: "AWS::AccountId"
-                                         - ":table/"
-                                         - Ref: "DynamoDBTable"
+                            - Fn::Join:
+                                - ""
+                                -
+                                    - "arn:aws:dynamodb:"
+                                    - Ref: "AWS::Region"
+                                    - ":"
+                                    - Ref: "AWS::AccountId"
+                                    - ":table/"
+                                    - Ref: "DynamoDBTable"
             Roles:
                 - Ref: "ExecutionRole"
     DynamoDBTable:
