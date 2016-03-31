@@ -29,6 +29,8 @@ function createContext (callback) {
     };
 }
 
+var date = new Date('2016-03-24')
+
 var emailService = {
     sendEmail: function (email, callback) {
         callback(null);
@@ -53,8 +55,6 @@ ava.test.cb.serial('item to dynamo from kinesis when no error', function(test) {
         test.end();
     });
 
-    var date = new Date('2016-03-24')
-
     index.processEvents(kinesisEvent.withoutError, context, {
         putItem: function (record, callback) {
             test.same(record.Item.id.S, 'myFront');
@@ -78,8 +78,6 @@ ava.test.cb.serial('item to dynamo from kinesis when error', function(test) {
         test.end();
     });
 
-    var date = new Date('2016-03-24')
-
     index.processEvents(kinesisEvent.withError, context, {
         putItem: function (record, callback) {
             test.same(record.Item.id.S, 'myFront');
@@ -87,6 +85,30 @@ ava.test.cb.serial('item to dynamo from kinesis when error', function(test) {
             callback(null, {
                 Attributes: {
                     status: { S: 'success' },
+                    id: { S: record.Item.id.S }
+                }
+            });
+        }
+    }, date, emailService);
+});
+
+ava.test.cb.serial('update item but don\'t send an email if status already error', function(test) {
+    const timeout = failAfter(1000, test);
+    const context = createContext(() => {
+        test.is(context.spies.succeed.length, 1, 'Expecting succeed calls');
+        test.is(context.spies.fail.length, 0, 'Expecting fail calls');
+        test.false(emailService.sendEmail.called);
+        clearTimeout(timeout);
+        test.end();
+    });
+
+    index.processEvents(kinesisEvent.withError, context, {
+        putItem: function (record, callback) {
+            test.same(record.Item.id.S, 'myFront');
+            test.same(record.Item.pressedTime.S, date.toISOString());
+            callback(null, {
+                Attributes: {
+                    status: { S: 'error' },
                     id: { S: record.Item.id.S }
                 }
             });
