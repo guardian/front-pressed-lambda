@@ -16,6 +16,8 @@
     "start": "node lambda/index.js"
   },
   "dependencies": {
-    "async": "^1.5.2"
+    "async": "^1.5.2",
+    "nunjucks": "^2.4.1",
+    "sinon": "^1.17.3"
   }
 }
