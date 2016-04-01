@@ -16,9 +16,6 @@ Parameters:
             - CODE
             - PROD
         Default: CODE
-    EventSourceKinesisArn:
-        Description: Kinesis stream emitting front press events
-        Type: String
     FrontendRoleToAssume:
         Description: Frontend Role to assume for cross account policies
         Type: String
@@ -42,24 +39,6 @@ Resources:
                               - lambda.amazonaws.com
                       Action: "sts:AssumeRole"
             Path: /
-    KinesisPolicy:
-        Type: AWS::IAM::Policy
-        Properties:
-            PolicyName: consumeKinesis
-            PolicyDocument:
-                Statement:
-                    -   Effect: "Allow"
-                        Action:
-                            - "kinesis:GetRecords"
-                            - "kinesis:GetShardIterator"
-                            - "kinesis:DescribeStream"
-                            - "kinesis:ListStreams"
-                        Resource:
-                            -
-                                Ref: "EventSourceKinesisArn"
-            Roles:
-                - Ref: "ExecutionRole"
-
     DynamoDBPolicy:
         Type: AWS::IAM::Policy
         Properties:
@@ -67,7 +46,7 @@ Resources:
             PolicyDocument:
                 Version: "2012-10-17"
                 Statement:
-                    -   Effect: "Allow"
+                    -   Effect: Allow
                         Action:
                             - "dynamodb:PutItem"
                             - "dynamodb:UpdateItem"
@@ -82,7 +61,7 @@ Resources:
                                     - ":table/"
                                     - Ref: "DynamoDBTable"
             Roles:
-                - Ref: "ExecutionRole"
+                - Ref: ExecutionRole
     DynamoDBTable:
         Type: "AWS::DynamoDB::Table"
         Properties:
@@ -105,31 +84,3 @@ Resources:
                         - "StageMap"
                         - Ref: "Stage"
                         - "WriteThroughput"
-    Lambda:
-        Type: AWS::Lambda::Function
-        Properties:
-            Code:
-                S3Bucket: front-pressed-lambda-dist
-                S3Key:
-                    "Fn::Join":
-                        - "/"
-                        -
-                            - Ref: Stage
-                            - artifact.zip
-            Description: Store events from Kinesos into Dynamo
-            Handler: index.handler
-            MemorySize: 128
-            Role:
-                "Fn::GetAtt": ["ExecutionRole", "Arn"]
-            Runtime: nodejs
-            Timeout: 60
-    EventSource:
-        Type: AWS::Lambda::EventSourceMapping
-        Properties:
-            BatchSize: 10
-            Enabled: true
-            EventSourceArn:
-                Ref: EventSourceKinesisArn
-            FunctionName:
-                Ref: Lambda
-            StartingPosition: LATEST
