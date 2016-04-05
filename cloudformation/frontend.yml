@@ -1,0 +1,176 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Lambda to store front pressed events Kinesis stream to Dynamo
+Parameters:
+    Stack:
+        Description: Stack name
+        Type: String
+        Default: frontend
+    App:
+        Description: Application name
+        Type: String
+        Default: front-pressed-lambda
+    Stage:
+        Description: Stage name
+        Type: String
+        AllowedValues:
+            - CODE
+            - PROD
+        Default: CODE
+    CmsFrontsRoleToAssume:
+        Description: CMS Fronts role
+        Type: String
+    EventSourceKinesisStreamArn:
+        Description: Kinesis stream where facia press sends notifications
+        Type: String
+    DistBucket:
+        Description: Bucket containing distributable lambda code
+        Type: String
+Resources:
+    ExecutionRole:
+        Type: AWS::IAM::Role
+        Properties:
+            AssumeRolePolicyDocument:
+                Statement:
+                    - Effect: Allow
+                      Principal:
+                          Service:
+                              - lambda.amazonaws.com
+                      Action: "sts:AssumeRole"
+            Path: /
+    CmsFrontsPolicy:
+        Type: AWS::IAM::Policy
+        Properties:
+            PolicyName: CmsFrontsPolicy
+            PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - Effect: Allow
+                      Action: "sts:AssumeRole"
+                      Resource:
+                        Ref: CmsFrontsRoleToAssume
+            Roles:
+                - Ref: ExecutionRole
+    ConsumeKinesisRole:
+        Type: AWS::IAM::Policy
+        Properties:
+            PolicyName: ConsumeKinesisRole
+            PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - Effect: Allow
+                      Action:
+                        - "kinesis:GetRecords"
+                        - "kinesis:GetShardIterator"
+                        - "kinesis:DescribeStream"
+                        - "kinesis:ListStreams"
+                      Resource:
+                        - Ref: EventSourceKinesisStreamArn
+            Roles:
+                - Ref: ExecutionRole
+    DiscoverStreamsRole:
+        Type: AWS::IAM::Policy
+        Properties:
+            PolicyName: DiscoverStreamsRole
+            PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - Effect: Allow
+                      Action:
+                        - "kinesis:ListStreams"
+                      Resource: "*"
+            Roles:
+                - Ref: ExecutionRole
+    Logs:
+        Type: AWS::IAM::Policy
+        Properties:
+            PolicyName: Logs
+            PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - Effect: Allow
+                      Action:
+                        - "logs:CreateLogGroup"
+                        - "logs:CreateLogStream"
+                        - "logs:PutLogEvents"
+                      Resource: "arn:aws:logs:*:*:*"
+            Roles:
+                - Ref: ExecutionRole
+    InvokeLambda:
+        Type: AWS::IAM::Policy
+        Properties:
+            PolicyName: InvokeLambda
+            PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - Effect: Allow
+                      Action:
+                        - "lambda:InvokeFunction"
+                      Resource: "*"
+            Roles:
+                - Ref: ExecutionRole
+    ReadBucketPolicy:
+        Type: AWS::IAM::Policy
+        Properties:
+            PolicyName: ReadBucketPolicy
+            PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - Effect: Allow
+                      Action:
+                        - "s3:GetObject"
+                      Resource:
+                        - Fn::Join:
+                                - ""
+                                -
+                                    - "arn:aws:s3:::"
+                                    - Ref: DistBucket
+                                    - "/*"
+            Roles:
+                - Ref: ExecutionRole
+    ListBucketPolicy:
+        Type: AWS::IAM::Policy
+        Properties:
+            PolicyName: ListBucketPolicy
+            PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    - Effect: Allow
+                      Action:
+                        - "s3:ListBucket"
+                      Resource:
+                        - Fn::Join:
+                                - ""
+                                -
+                                    - "arn:aws:s3:::"
+                                    - Ref: DistBucket
+            Roles:
+                - Ref: ExecutionRole
+    Lambda:
+        Type: AWS::Lambda::Function
+        Properties:
+            Code:
+                S3Bucket:
+                    Ref: DistBucket
+                S3Key:
+                    "Fn::Join":
+                        - "/"
+                        -
+                            - Ref: Stage
+                            - artifact.zip
+            Description: Store press notification in Dynamo
+            Handler: index.handler
+            MemorySize: 128
+            Role:
+                "Fn::GetAtt": ["ExecutionRole", "Arn"]
+            Runtime: nodejs
+            Timeout: 60
+    EventSource:
+        Type: AWS::Lambda::EventSourceMapping
+        Properties:
+            BatchSize: 5
+            Enabled: true
+            EventSourceArn:
+                Ref: EventSourceKinesisStreamArn
+            FunctionName:
+                Ref: Lambda
+            StartingPosition: LATEST

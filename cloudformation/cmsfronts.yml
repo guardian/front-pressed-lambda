@@ -16,8 +16,8 @@ Parameters:
             - CODE
             - PROD
         Default: CODE
-    FrontendRoleToAssume:
-        Description: Frontend Role to assume for cross account policies
+    FrontendAccountId:
+        Description: Frontend account
         Type: String
 Mappings:
     StageMap:
@@ -35,8 +35,12 @@ Resources:
                 Statement:
                     - Effect: Allow
                       Principal:
-                          Service:
-                              - lambda.amazonaws.com
+                        AWS:
+                            "Fn::Join": [ "", [
+                                "arn:aws:iam::",
+                                { "Ref": "FrontendAccountId" },
+                                ":root"
+                            ]]
                       Action: "sts:AssumeRole"
             Path: /
     DynamoDBPolicy:
@@ -59,28 +63,28 @@ Resources:
                                     - ":"
                                     - Ref: "AWS::AccountId"
                                     - ":table/"
-                                    - Ref: "DynamoDBTable"
+                                    - Ref: DynamoDBTable
             Roles:
                 - Ref: ExecutionRole
     DynamoDBTable:
-        Type: "AWS::DynamoDB::Table"
+        Type: AWS::DynamoDB::Table
         Properties:
             AttributeDefinitions:
                 -
-                    AttributeName: "id"
-                    AttributeType: "S"
+                    AttributeName: frontId
+                    AttributeType: S
             KeySchema:
                 -
-                    AttributeName: "id"
-                    KeyType: "HASH"
+                    AttributeName: frontId
+                    KeyType: HASH
             ProvisionedThroughput:
                 ReadCapacityUnits:
                     Fn::FindInMap:
-                        - "StageMap"
-                        - Ref: "Stage"
-                        - "ReadThroughput"
+                        - StageMap
+                        - Ref: Stage
+                        - ReadThroughput
                 WriteCapacityUnits:
                     Fn::FindInMap:
-                        - "StageMap"
-                        - Ref: "Stage"
-                        - "WriteThroughput"
+                        - StageMap
+                        - Ref: Stage
+                        - WriteThroughput
