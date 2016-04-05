@@ -1,5 +1,5 @@
 {
-  "name": "last-pressed",
+  "name": "front-pressed-lambda",
   "description": "Record last pressed times of fronts",
   "main": "lambda/index.js",
   "version": "0.0.1",
