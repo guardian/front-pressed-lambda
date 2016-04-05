@@ -6,9 +6,12 @@ import config from '../tmp/config.json';
 import AWS from 'aws-sdk';
 AWS.config.region = config.AWS.region;
 
-const TABLE_NAME = config.dynamo.tableName;
 const PARALLEL_JOBS = 3;
-
+const STAGE = (process.env.AWS_LAMBDA_FUNCTION_NAME || 'CODE')
+    .split('-')
+    .filter(token => /(CODE?|PROD?)/.test(token))
+    .pop();
+const TABLE_NAME = config.dynamo[STAGE].tableName;
 
 export function handler (event, context) {
     const today = new Date();

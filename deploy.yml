@@ -1,0 +1,32 @@
+defaultStacks:
+    - frontend
+packages:
+    s3:
+        type: aws-s3
+        data:
+            bucket: aws-front-pressed-lambda-dist
+            cacheControl: "public, max-age=315360000"
+            prefixPackage: false
+            prefixStack: true
+            publicReadAcl: false
+    lambda:
+        type: aws-lambda
+        data:
+            functions:
+                CODE:
+                    name: front-pressed-lambda-CODE-Lambda-15BJ5YBQUFFNE
+                    filename: artifact.zip
+                PROD:
+                    name: front-pressed-lambda-CODE-Lambda-15BJ5YBQUFFNE
+                    filename: artifact.zip
+recipes:
+    upload:
+        actionsBeforeApp:
+            - s3.uploadStaticFiles
+    lambda:
+        actionsBeforeApp:
+            - lambda.updateLambda
+    default:
+        depends:
+            - upload
+            - lambda

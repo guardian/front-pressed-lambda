@@ -3,11 +3,10 @@ var AWS = require('aws-sdk');
 var s3 = new AWS.S3();
 
 var bucket = process.argv[2];
-var stage = process.argv[3];
 
 s3.getObject({
 	Bucket: bucket,
-	Key: stage.toUpperCase() + '/config.json'
+	Key: 'config.json'
 }, function (err, data) {
 	if (err) {
 		console.error(err);
