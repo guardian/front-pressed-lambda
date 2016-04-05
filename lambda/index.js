@@ -1,47 +1,47 @@
-var async = require('async');
-var config = require('./config');
-var fs = require('fs');
-var nunjucks = require('nunjucks');
-var path = require('path');
-
-var AWS = require('aws-sdk');
+import mapLimit from 'async-es/mapLimit';
+// import fs from 'fs';
+import config from '../tmp/config.json';
+// import nunjucks from 'nunjucks';
+// import path from 'path';
+import AWS from 'aws-sdk';
 AWS.config.region = config.AWS.region;
 
-var ses = new AWS.SES({apiVersion: '2010-12-01'});
+const TABLE_NAME = config.dynamo.tableName;
+const PARALLEL_JOBS = 3;
 
-var dynamodb = new AWS.DynamoDB();
 
-var TABLE_NAME = config.dynamo.tableName;
-
-exports.handler = function (event, context) {
-    var today = new Date();
-    this.processEvents(event, context, dynamodb, today, ses);
+export function handler (event, context) {
+    const today = new Date();
+    const ses = new AWS.SES({apiVersion: '2010-12-01'});
+    const dynamodb = new AWS.DynamoDB();
+    processEvents(event, context, dynamodb, today.toISOString(), ses);
 }
 
-exports.processEvents = function (event, context, dynamo, date, emailService) {
-    var job = { started: 0, completed: 0, total: event.Records.length };
+export function processEvents (event, context, dynamo, isoDate, emailService) {
+    const job = { started: 0, completed: 0, total: event.Records.length };
 
-    var mapLimit = async.mapLimit;
-
-    mapLimit(event.Records, 3, putItemToDynamo.bind(job, dynamo, date, emailService), function(err) {
-        if (err) {
-            console.error('Error processing records', err);
-            context.fail('Error when processing records');
-        } else {
-            console.log('DONE');
-            context.succeed('Processed ' + event.Records.length + ' records.');
+    mapLimit(
+        event.Records,
+        PARALLEL_JOBS,
+        (record, callback) => putItemToDynamo(job, dynamo, isoDate, emailService, record, callback),
+        err => {
+            if (err) {
+                console.error('Error processing records', err);
+                context.fail('Error when processing records');
+            } else {
+                console.log('DONE');
+                context.succeed('Processed ' + event.Records.length + ' records.');
+            }
         }
-    });
+    );
 }
 
-function putItemToDynamo(dynamo, date, emailService, record, callback) {
-
-    var job = this;
-    var jobId = ++job.started;
+function putItemToDynamo (job, dynamo, isoDate, emailService, record, callback) {
+    const jobId = ++job.started;
 
     console.log('Process job ' + jobId + ' in ' + record.kinesis.sequenceNumber);
 
-    var data = JSON.parse(record.kinesis.data);
+    const data = JSON.parse(record.kinesis.data);
     return dynamo.putItem({
         TableName: TABLE_NAME,
         Item: {
@@ -49,7 +49,7 @@ function putItemToDynamo(dynamo, date, emailService, record, callback) {
                 S: data.front
             },
             pressedTime: {
-                S: date.toISOString()
+                S: isoDate
             },
             status: {
                 S: data.status
@@ -59,35 +59,35 @@ function putItemToDynamo(dynamo, date, emailService, record, callback) {
             }
         },
         ReturnValues: 'ALL_OLD'
-
-    }, function (err, response) {
-
-        job.completed += 1;
-
+    }, (err, response) => {
         if (err) {
-            console.error('Error while processing ' + jobId + ' in ' + record.kinesis.sequenceNumber, err);
+            console.error('Error while processing ' + jobId, err);
             callback(err);
         } else {
+            notifyInCaseOfErrors(response, data, job, jobId, emailService, callback);
+        }
+    });
+}
 
-            if (response.Attributes.status.S === 'success' && data.status === 'error') {
-                sendEmail(response.Attributes.id.S, emailService, function (err, data) {
-                    if (err) {
-                        callback(err);
-                    } else {
-                        callback(null);
-                    }
-                });
+function notifyInCaseOfErrors (response, data, job, jobId, emailService, callback) {
+    if (response.Attributes.status.S === 'success' && data.status === 'error') {
+        sendEmail(response.Attributes.id.S, emailService, function (err) {
+            job.completed += 1;
+            if (err) {
+                callback(err);
             } else {
                 callback(null);
             }
+        });
+    } else {
+        job.completed += 1;
+        callback(null);
+    }
+}
 
-        }
-    });
-};
-
-function sendEmail(frontId, emailService, callback) {
-
-    var filePath = path.join(__dirname, 'email_template.txt');
+function sendEmail (frontId, emailService, callback) {
+    return callback();
+    const filePath = path.join(__dirname, 'email_template.txt');
 
     fs.readFile(filePath, {encoding: 'utf-8'}, function(err, data) {
 
@@ -95,10 +95,10 @@ function sendEmail(frontId, emailService, callback) {
             callback(err);
         } else {
 
-            var emailFields = data.split('\n');
-            var emailMessage = nunjucks.renderString(emailFields[4], {frontId: frontId});
-            var toAddresses = [emailFields[1].split(' ')[1]];
-            var email ={
+            const emailFields = data.split('\n');
+            const emailMessage = nunjucks.renderString(emailFields[4], {frontId: frontId});
+            const toAddresses = [emailFields[1].split(' ')[1]];
+            const email ={
                 Source: emailFields[0].split(' ')[1],
                 Destination: { ToAddresses: toAddresses },
                 Message: {

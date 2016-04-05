@@ -1,9 +1,0 @@
-{
-    "dynamo": {
-        "tableName": "reetta-stale-fronts"
-    },
-    "AWS": {
-        "region": "eu-west-1"
-    }
-}
-
