@@ -1,0 +1,5 @@
+FROM: reetta.vaahtoranta@guardian.co.uk
+TO: reetta.vaahtoranta@guardian.co.uk
+SUBJECT: stale front
+
+Failed to press front {{ frontId }}
