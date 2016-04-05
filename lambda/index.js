@@ -44,7 +44,8 @@ function putItemToDynamo (job, dynamo, isoDate, emailService, record, callback) 
 
     console.log('Process job ' + jobId + ' in ' + record.kinesis.sequenceNumber);
 
-    const data = JSON.parse(record.kinesis.data);
+    const buffer = new Buffer(record.kinesis.data, 'base64');
+    const data = JSON.parse(buffer.toString('utf8'));
     return dynamo.putItem({
         TableName: TABLE_NAME,
         Item: {

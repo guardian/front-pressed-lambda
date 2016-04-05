@@ -1,22 +1,27 @@
 var messageWithoutError = {
-    status: "success",
-    front: "myFront",
+    status: 'success',
+    front: 'myFront',
     isLive: false,
-    message: "message"
-}
+    message: 'message'
+};
 
 var messageWithError = {
-    status: "error",
-    front: "myFront",
+    status: 'error',
+    front: 'myFront',
     isLive: false,
-    message: "message"
+    message: 'message'
+};
+
+function encode (message) {
+    const buffer = new Buffer(JSON.stringify(message), 'utf8');
+    return buffer.toString('base64');
 }
 
 module.exports = {
     withoutError: {
         Records: [{
             kinesis: {
-                data: JSON.stringify(messageWithoutError).toString('base64'),
+                data: encode(messageWithoutError),
                 sequenceNumber: 0
             }
         }]
@@ -24,7 +29,7 @@ module.exports = {
     withError: {
         Records: [{
             kinesis: {
-                data: JSON.stringify(messageWithError).toString('base64'),
+                data: encode(messageWithError),
                 sequenceNumber: 0
             }
         }]
