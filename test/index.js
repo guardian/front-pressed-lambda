@@ -56,12 +56,12 @@ ava.test.cb.serial('item to dynamo from kinesis when no error', function (test) 
     });
 
     index.processEvents(kinesisEvent.withoutError, context, {
-        putItem: function (record, callback) {
-            test.same(record.Item.id.S, 'myFront');
-            test.same(record.Item.pressedTime.S, date);
+        updateItem: function (record, callback) {
+            test.same(record.Key.frontId.S, 'myFront');
+            test.same(record.ExpressionAttributeValues[':time'].S, date);
             callback(null, {
                 Attributes: {
-                    status: { S: 'success' }
+                    statusCode: { S: 'success' }
                 }
             });
         }
@@ -79,13 +79,13 @@ ava.test.cb.serial.skip('item to dynamo from kinesis when error', function (test
     });
 
     index.processEvents(kinesisEvent.withError, context, {
-        putItem: function (record, callback) {
-            test.same(record.Item.id.S, 'myFront');
-            test.same(record.Item.pressedTime.S, date);
+        updateItem: function (record, callback) {
+            test.same(record.Key.frontId.S, 'myFront');
+            test.same(record.ExpressionAttributeValues[':time'].S, date);
             callback(null, {
                 Attributes: {
-                    status: { S: 'success' },
-                    id: { S: record.Item.id.S }
+                    statusCode: { S: 'success' },
+                    id: { S: record.Key.frontId.S }
                 }
             });
         }
@@ -103,13 +103,13 @@ ava.test.cb.serial('update item but don\'t send an email if status already error
     });
 
     index.processEvents(kinesisEvent.withError, context, {
-        putItem: function (record, callback) {
-            test.same(record.Item.id.S, 'myFront');
-            test.same(record.Item.pressedTime.S, date);
+        updateItem: function (record, callback) {
+            test.same(record.Key.frontId.S, 'myFront');
+            test.same(record.ExpressionAttributeValues[':time'].S, date);
             callback(null, {
                 Attributes: {
-                    status: { S: 'error' },
-                    id: { S: record.Item.id.S }
+                    statusCode: { S: 'error' },
+                    id: { S: record.Key.frontId.S }
                 }
             });
         }

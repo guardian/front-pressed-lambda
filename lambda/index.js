@@ -46,20 +46,29 @@ function putItemToDynamo (job, dynamo, isoDate, emailService, record, callback) 
 
     const buffer = new Buffer(record.kinesis.data, 'base64');
     const data = JSON.parse(buffer.toString('utf8'));
-    return dynamo.putItem({
+    const updateExpression = 'SET pressedTime=:time, statusCode=:status, messageText=:message' +
+        (data.status === 'ok' ? ', errorCount=:count' : ' ADD errorCount :count');
+
+    return dynamo.updateItem({
         TableName: TABLE_NAME,
-        Item: {
-            id: {
+        Key: {
+            frontId: {
                 S: data.front
+            }
+        },
+        UpdateExpression: updateExpression,
+        ExpressionAttributeValues: {
+            ':count': {
+                N: data.status === 'ok' ? '0' : '1'
             },
-            pressedTime: {
+            ':time': {
                 S: isoDate
             },
-            status: {
+            ':status': {
                 S: data.status
             },
-            message: {
-                S: data.message
+            ':message': {
+                S: data.message || data.status
             }
         },
         ReturnValues: 'ALL_OLD'
@@ -74,8 +83,8 @@ function putItemToDynamo (job, dynamo, isoDate, emailService, record, callback) 
 }
 
 function notifyInCaseOfErrors (response, data, job, jobId, emailService, callback) {
-    if (response.Attributes.status.S === 'success' && data.status === 'error') {
-        sendEmail(response.Attributes.id.S, emailService, function (err) {
+    if (response.Attributes.statusCode.S === 'success' && data.status === 'error') {
+        sendEmail(response.Attributes.frontId.S, emailService, function (err) {
             job.completed += 1;
             if (err) {
                 callback(err);
