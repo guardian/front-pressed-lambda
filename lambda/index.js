@@ -1,32 +1,50 @@
-import mapLimit from 'async-es/mapLimit';
-// import fs from 'fs';
 import config from '../tmp/config.json';
-// import nunjucks from 'nunjucks';
-// import path from 'path';
 import AWS from 'aws-sdk';
+import mapLimit from 'async-es/mapLimit';
+
 AWS.config.region = config.AWS.region;
 
-const PARALLEL_JOBS = 3;
+const PARALLEL_JOBS = 4;
 const STAGE = (process.env.AWS_LAMBDA_FUNCTION_NAME || 'CODE')
     .split('-')
     .filter(token => /(CODE?|PROD?)/.test(token))
     .pop();
+const ROLE_TO_ASSUME = config.AWS.roleToAssume[STAGE];
 const TABLE_NAME = config.dynamo[STAGE].tableName;
 
 export function handler (event, context) {
     const today = new Date();
-    const ses = new AWS.SES({apiVersion: '2010-12-01'});
-    const dynamodb = new AWS.DynamoDB();
-    processEvents(event, context, dynamodb, today.toISOString(), ses);
+    const sts = new AWS.STS();
+
+    sts.assumeRole({
+        RoleArn: ROLE_TO_ASSUME,
+        RoleSessionName: 'lambda-assume-role',
+        DurationSeconds: 900
+    }, (err, data) => {
+        if (err) {
+            console.error(err.message);
+            context.fail('Error assuming cross account role');
+        } else {
+            const stsCredentials = data.Credentials;
+            const dynamo = new AWS.DynamoDB({
+                credentials: new AWS.Credentials(
+                    stsCredentials.AccessKeyId,
+                    stsCredentials.SecretAccessKey,
+                    stsCredentials.SessionToken
+                )
+            });
+            storeEvents({event, context, dynamo, isoDate: today.toISOString()});
+        }
+    });
 }
 
-export function processEvents (event, context, dynamo, isoDate, emailService) {
-    const job = { started: 0, completed: 0, total: event.Records.length };
+export function storeEvents ({event, context, dynamo, isoDate}) {
+    const jobs = { started: 0, completed: 0, total: event.Records.length };
 
     mapLimit(
         event.Records,
         PARALLEL_JOBS,
-        (record, callback) => putItemToDynamo(job, dynamo, isoDate, emailService, record, callback),
+        (record, callback) => putRecordToDynamo({jobs, record, dynamo, isoDate, callback}),
         err => {
             if (err) {
                 console.error('Error processing records', err);
@@ -39,8 +57,8 @@ export function processEvents (event, context, dynamo, isoDate, emailService) {
     );
 }
 
-function putItemToDynamo (job, dynamo, isoDate, emailService, record, callback) {
-    const jobId = ++job.started;
+function putRecordToDynamo ({jobs, record, dynamo, isoDate, callback}) {
+    const jobId = ++jobs.started;
 
     console.log('Process job ' + jobId + ' in ' + record.kinesis.sequenceNumber);
 
@@ -50,6 +68,7 @@ function putItemToDynamo (job, dynamo, isoDate, emailService, record, callback) 
         (data.status === 'ok' ? ', errorCount=:count' : ' ADD errorCount :count');
 
     return dynamo.updateItem({
+
         TableName: TABLE_NAME,
         Key: {
             frontId: {
@@ -70,71 +89,13 @@ function putItemToDynamo (job, dynamo, isoDate, emailService, record, callback) 
             ':message': {
                 S: data.message || data.status
             }
-        },
-        ReturnValues: 'ALL_OLD'
-    }, (err, response) => {
+        }
+    }, (err) => {
         if (err) {
             console.error('Error while processing ' + jobId, err);
             callback(err);
         } else {
-            notifyInCaseOfErrors(response, data, job, jobId, emailService, callback);
+            callback();
         }
     });
 }
-
-function notifyInCaseOfErrors (response, data, job, jobId, emailService, callback) {
-    if (response.Attributes.statusCode.S === 'success' && data.status === 'error') {
-        sendEmail(response.Attributes.frontId.S, emailService, function (err) {
-            job.completed += 1;
-            if (err) {
-                callback(err);
-            } else {
-                callback(null);
-            }
-        });
-    } else {
-        job.completed += 1;
-        callback(null);
-    }
-}
-
-function sendEmail (frontId, emailService, callback) {
-    return callback();
-    const filePath = path.join(__dirname, 'email_template.txt');
-
-    fs.readFile(filePath, {encoding: 'utf-8'}, function(err, data) {
-
-        if (err) {
-            callback(err);
-        } else {
-
-            const emailFields = data.split('\n');
-            const emailMessage = nunjucks.renderString(emailFields[4], {frontId: frontId});
-            const toAddresses = [emailFields[1].split(' ')[1]];
-            const email ={
-                Source: emailFields[0].split(' ')[1],
-                Destination: { ToAddresses: toAddresses },
-                Message: {
-                    Subject: {
-                        Data: emailFields[2]
-                    },
-                    Body: {
-                        Html: {
-                            Data: '<html><body>' + emailMessage + '</body></html>'
-                        }
-                    }
-                }
-            };
-
-            emailService.sendEmail(email, function(err, data) {
-                if (err) {
-                    callback(err);
-                } else {
-                    callback(null);
-                }
-            });
-        }
-    });
-}
-
-

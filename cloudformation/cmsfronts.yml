@@ -28,7 +28,7 @@ Mappings:
             ReadThroughput: 5
             WriteThroughput: 5
 Resources:
-    ExecutionRole:
+    AssumedRole:
         Type: AWS::IAM::Role
         Properties:
             AssumeRolePolicyDocument:
@@ -65,7 +65,7 @@ Resources:
                                     - ":table/"
                                     - Ref: DynamoDBTable
             Roles:
-                - Ref: ExecutionRole
+                - Ref: AssumedRole
     DynamoDBTable:
         Type: AWS::DynamoDB::Table
         Properties:

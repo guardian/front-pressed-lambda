@@ -7,9 +7,7 @@ export default {
 	entry: 'lambda/index.js',
 	plugins: [
 		json(),
-		babel({
-			exclude: 'node_modules/**'
-		}),
+		babel(),
 		nodeResolve(),
 		commonjs()
 	],
