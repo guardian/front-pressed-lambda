@@ -14,10 +14,10 @@ packages:
         data:
             functions:
                 CODE:
-                    name: front-pressed-lambda-CODE-Lambda-15BJ5YBQUFFNE
+                    name: front-pressed-lambda-CODE-Lambda-FZLRHGCP0WSP
                     filename: artifact.zip
                 PROD:
-                    name: front-pressed-lambda-CODE-Lambda-15BJ5YBQUFFNE
+                    name: front-pressed-lambda-PROD-Lambda-12VCTV2MBIBW0
                     filename: artifact.zip
 recipes:
     upload:
