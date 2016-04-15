@@ -71,12 +71,18 @@ Resources:
         Properties:
             AttributeDefinitions:
                 -
+                    AttributeName: stageName
+                    AttributeType: S
+                -
                     AttributeName: frontId
                     AttributeType: S
             KeySchema:
                 -
-                    AttributeName: frontId
+                    AttributeName: stageName
                     KeyType: HASH
+                -
+                    AttributeName: frontId
+                    KeyType: RANGE
             ProvisionedThroughput:
                 ReadCapacityUnits:
                     Fn::FindInMap:

@@ -71,6 +71,9 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, callback}) {
 
         TableName: TABLE_NAME,
         Key: {
+            stageName: {
+                S: data.isLive ? 'live' : 'draft'
+            },
             frontId: {
                 S: data.front
             }
