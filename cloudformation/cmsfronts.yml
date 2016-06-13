@@ -19,6 +19,9 @@ Parameters:
     FrontendAccountId:
         Description: Frontend account
         Type: String
+    SESLambda:
+        Description: Lambda used to send emails
+        Type: String
 Mappings:
     StageMap:
         PROD:
@@ -94,3 +97,24 @@ Resources:
                         - StageMap
                         - Ref: Stage
                         - WriteThroughput
+    SendEmail:
+        Type: AWS::IAM::Policy
+        Properties:
+            PolicyName: SendEmail
+            PolicyDocument:
+                Version: "2012-10-17"
+                Statement:
+                    -   Effect: Allow
+                        Action:
+                            - "lambda:InvokeFunction"
+                        Resource:
+                            - Fn::Join:
+                                - ""
+                                - - "arn:aws:lambda:"
+                                  - Ref: AWS::Region
+                                  - ":"
+                                  - Ref: AWS::AccountId
+                                  - ":function:"
+                                  - Ref: SESLambda
+            Roles:
+                - Ref: AssumedRole
