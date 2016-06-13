@@ -113,6 +113,7 @@ function maybeNotifyPressBroken ({item, logger, callback, lambda}) {
     const attributes = item ? item.Attributes : {};
     const errorCount = attributes.errorCount
         ? parseInt(item.Attributes.errorCount.N, 10) : 0;
+    const frontId = attributes.frontId ? attributes.frontId.S : 'unknown';
     if (errorCount >= ERROR_THRESHOLD) {
         logger.log('Sending email');
         lambda.invoke({
@@ -124,7 +125,8 @@ function maybeNotifyPressBroken ({item, logger, callback, lambda}) {
                 subject: 'Front press error',
                 template: emailTemplate,
                 env: {
-                    front: attributes.frontId ? attributes.frontId.S : 'unknown',
+                    front: frontId,
+                    stage: attributes.stageName ? attributes.stageName.S : 'unknown',
                     count: errorCount,
                     faciaPath: config.facia[STAGE].path
                 }
