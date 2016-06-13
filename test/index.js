@@ -43,7 +43,7 @@ ava.test('front pressed error is stored correctly', function (test) {
             callback(null, {
                 Attributes: {
                     statusCode: { S: 'success' },
-                    id: { S: record.Key.frontId.S }
+                    frontId: { S: record.Key.frontId.S }
                 }
             });
         }
@@ -68,6 +68,8 @@ ava.test('dynamo DB error makes the lambda fail', function (test) {
 });
 
 ava.test('send email when error count is above threshold', function (test) {
+    test.plan(4);
+
     const dynamo = {
         updateItem: function (record, callback) {
             test.deepEqual(record.Key.frontId.S, 'myFront');
@@ -75,7 +77,7 @@ ava.test('send email when error count is above threshold', function (test) {
             callback(null, {
                 Attributes: {
                     statusCode: { S: 'success' },
-                    id: { S: record.Key.frontId.S },
+                    frontId: { S: record.Key.frontId.S },
                     errorCount: { N: '4' }
                 }
             });
@@ -84,8 +86,8 @@ ava.test('send email when error count is above threshold', function (test) {
     const lambda = {
         invoke (invocation, callback) {
             const payload = JSON.parse(invocation.Payload);
-            test.equal(payload.env.front, 'myFront');
-            test.equal(payload.env.count, 4);
+            test.is(payload.env.front, 'myFront');
+            test.is(payload.env.count, 4);
             callback();
         }
     };

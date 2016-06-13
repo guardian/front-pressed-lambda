@@ -110,7 +110,9 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, callback, logger, la
 }
 
 function maybeNotifyPressBroken ({item, logger, callback, lambda}) {
-    const errorCount = item ? parseInt(item.Attributes.errorCount) : 0;
+    const attributes = item ? item.Attributes : {};
+    const errorCount = attributes.errorCount
+        ? parseInt(item.Attributes.errorCount.N, 10) : 0;
     if (errorCount >= ERROR_THRESHOLD) {
         logger.log('Sending email');
         lambda.invoke({
@@ -122,8 +124,8 @@ function maybeNotifyPressBroken ({item, logger, callback, lambda}) {
                 subject: 'Front press error',
                 template: emailTemplate,
                 env: {
-                    front: item.front,
-                    count: item.errorCount,
+                    front: attributes.frontId ? attributes.frontId.S : 'unknown',
+                    count: errorCount,
                     faciaPath: config.facia[STAGE].path
                 }
             })

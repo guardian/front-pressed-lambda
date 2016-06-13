@@ -7,6 +7,7 @@ Facia press continuously presses new fronts and sends Kinesis update on the stat
 This lambda listens to Kinesis and store last press date in Dynamo DB.
 If the error count is above a threshold, it sends an alert mail.
 
+
 ### Unit tests
 
 The lambda fetches secrets from an S3 bucket.
