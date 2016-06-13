@@ -33,34 +33,34 @@ export function handler (event, context) {
                     stsCredentials.SessionToken
                 )
             });
-            storeEvents({event, context, dynamo, isoDate: today.toISOString()});
+            storeEvents({event, context, dynamo, isoDate: today.toISOString(), logger: console});
         }
     });
 }
 
-export function storeEvents ({event, context, dynamo, isoDate}) {
+export function storeEvents ({event, context, dynamo, isoDate, logger}) {
     const jobs = { started: 0, completed: 0, total: event.Records.length };
 
     mapLimit(
         event.Records,
         PARALLEL_JOBS,
-        (record, callback) => putRecordToDynamo({jobs, record, dynamo, isoDate, callback}),
+        (record, callback) => putRecordToDynamo({jobs, record, dynamo, isoDate, logger, callback}),
         err => {
             if (err) {
-                console.error('Error processing records', err);
+                logger.error('Error processing records', err);
                 context.fail('Error when processing records');
             } else {
-                console.log('DONE');
+                logger.log('DONE');
                 context.succeed('Processed ' + event.Records.length + ' records.');
             }
         }
     );
 }
 
-function putRecordToDynamo ({jobs, record, dynamo, isoDate, callback}) {
+function putRecordToDynamo ({jobs, record, dynamo, isoDate, callback, logger}) {
     const jobId = ++jobs.started;
 
-    console.log('Process job ' + jobId + ' in ' + record.kinesis.sequenceNumber);
+    logger.log('Process job ' + jobId + ' in ' + record.kinesis.sequenceNumber);
 
     const buffer = new Buffer(record.kinesis.data, 'base64');
     const data = JSON.parse(buffer.toString('utf8'));
@@ -68,7 +68,6 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, callback}) {
         (data.status === 'ok' ? ', errorCount=:count' : ' ADD errorCount :count');
 
     return dynamo.updateItem({
-
         TableName: TABLE_NAME,
         Key: {
             stageName: {
@@ -95,7 +94,7 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, callback}) {
         }
     }, (err) => {
         if (err) {
-            console.error('Error while processing ' + jobId, err);
+            logger.error('Error while processing ' + jobId, err);
             callback(err);
         } else {
             callback();

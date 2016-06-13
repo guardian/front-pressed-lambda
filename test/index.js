@@ -1,5 +1,5 @@
 import ava from 'ava';
-import index from '../tmp/lambda/index';
+import {storeEvents as lambda} from '../tmp/lambda/index';
 import kinesisEvent from './fixtures/kinesisEvent.fixture';
 
 function createContext (callback) {
@@ -24,8 +24,10 @@ function createContext (callback) {
 
 const date = new Date('2016-03-24').toISOString();
 function invoke (event, context, dynamo) {
-    index.storeEvents({
-        event, context, dynamo, isoDate: date
+    lambda({
+        event, context, dynamo, isoDate: date, logger: {
+            error () {}, log () {}
+        }
     });
 }
 
@@ -37,8 +39,8 @@ ava.test.cb.serial('front pressed correctly', function (test) {
     });
     const dynamo = {
         updateItem: function (record, callback) {
-            test.same(record.Key.frontId.S, 'myFront');
-            test.same(record.ExpressionAttributeValues[':time'].S, date);
+            test.deepEqual(record.Key.frontId.S, 'myFront');
+            test.deepEqual(record.ExpressionAttributeValues[':time'].S, date);
             callback(null, {
                 Attributes: {
                     statusCode: { S: 'success' }
@@ -58,8 +60,8 @@ ava.test.cb.serial('front pressed error', function (test) {
     });
     const dynamo = {
         updateItem: function (record, callback) {
-            test.same(record.Key.frontId.S, 'myFront');
-            test.same(record.ExpressionAttributeValues[':time'].S, date);
+            test.deepEqual(record.Key.frontId.S, 'myFront');
+            test.deepEqual(record.ExpressionAttributeValues[':time'].S, date);
             callback(null, {
                 Attributes: {
                     statusCode: { S: 'success' },
@@ -80,8 +82,8 @@ ava.test.cb.serial('dynamo DB error', function (test) {
     });
     const dynamo = {
         updateItem: function (record, callback) {
-            test.same(record.Key.frontId.S, 'myFront');
-            test.same(record.ExpressionAttributeValues[':time'].S, date);
+            test.deepEqual(record.Key.frontId.S, 'myFront');
+            test.deepEqual(record.ExpressionAttributeValues[':time'].S, date);
             callback(new Error('some error'));
         }
     };
