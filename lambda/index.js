@@ -5,6 +5,7 @@ import emailTemplate from './email-template';
 
 AWS.config.region = config.AWS.region;
 
+const ERROR_THRESHOLD = 3;
 const PARALLEL_JOBS = 4;
 const STAGE = (process.env.AWS_LAMBDA_FUNCTION_NAME || 'CODE')
     .split('-')
@@ -109,8 +110,8 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, callback, logger, la
 }
 
 function maybeNotifyPressBroken ({item, logger, callback, lambda}) {
-    logger.log('about to send email', item);
-    if (item && item.thisIsNeverHappening) {
+    const errorCount = item ? parseInt(item.Attributes.errorCount) : 0;
+    if (errorCount >= ERROR_THRESHOLD) {
         logger.log('Sending email');
         lambda.invoke({
             FunctionName: config.email.lambda,
