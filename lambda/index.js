@@ -39,18 +39,18 @@ export function handler (event, context, callback) {
             const lambda = new AWS.Lambda({
                 credentials: assumedCredentials
             });
-            storeEvents({event, dynamo, lambda, isoDate: today.toISOString(), logger: console, callback});
+            storeEvents({event, dynamo, lambda, isoDate: today.toISOString(), logger: console, callback, isProd: STAGE === 'PROD'});
         }
     });
 }
 
-export function storeEvents ({event, callback, dynamo, isoDate, logger, lambda}) {
+export function storeEvents ({event, callback, dynamo, isoDate, logger, lambda, isProd}) {
     const jobs = { started: 0, completed: 0, total: event.Records.length };
 
     mapLimit(
         event.Records,
         PARALLEL_JOBS,
-        (record, jobCallback) => putRecordToDynamo({jobs, record, dynamo, isoDate, logger, callback: jobCallback, lambda}),
+        (record, jobCallback) => putRecordToDynamo({jobs, record, dynamo, isoDate, logger, isProd, callback: jobCallback, lambda}),
         err => {
             if (err) {
                 logger.error('Error processing records', err);
@@ -63,7 +63,7 @@ export function storeEvents ({event, callback, dynamo, isoDate, logger, lambda})
     );
 }
 
-function putRecordToDynamo ({jobs, record, dynamo, isoDate, callback, logger, lambda}) {
+function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, logger, lambda}) {
     const jobId = ++jobs.started;
 
     logger.log('Process job ' + jobId + ' in ' + record.kinesis.sequenceNumber);
@@ -104,17 +104,17 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, callback, logger, la
             logger.error('Error while processing ' + jobId, err);
             callback(err);
         } else {
-            maybeNotifyPressBroken({item: updatedItem, logger, callback, lambda});
+            maybeNotifyPressBroken({item: updatedItem, logger, isProd, callback, lambda});
         }
     });
 }
 
-function maybeNotifyPressBroken ({item, logger, callback, lambda}) {
+function maybeNotifyPressBroken ({item, logger, isProd, callback, lambda}) {
     const attributes = item ? item.Attributes : {};
     const errorCount = attributes.errorCount
         ? parseInt(item.Attributes.errorCount.N, 10) : 0;
     const frontId = attributes.frontId ? attributes.frontId.S : 'unknown';
-    if (errorCount >= ERROR_THRESHOLD) {
+    if (isProd && errorCount >= ERROR_THRESHOLD) {
         logger.log('Sending email');
         lambda.invoke({
             FunctionName: config.email.lambda,
