@@ -70,8 +70,15 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, lo
 
     const buffer = new Buffer(record.kinesis.data, 'base64');
     const data = JSON.parse(buffer.toString('utf8'));
-    const updateExpression = 'SET pressedTime=:time, statusCode=:status, messageText=:message' +
-        (data.status === 'ok' ? ', errorCount=:count' : ' ADD errorCount :count');
+    const action = {
+        SET: ['actionTime=:time', 'statusCode=:status', 'messageText=:message']
+    };
+    if (data.status === 'ok') {
+        action.SET.push('pressedTime=:time', 'errorCount=:count');
+    } else {
+        action.ADD = ['errorCount :count'];
+    }
+    const updateExpression = Object.keys(action).map(key => `${key} ${action[key].join(', ')}`).join(' ');
 
     return dynamo.updateItem({
         TableName: TABLE_NAME,
