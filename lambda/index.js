@@ -121,6 +121,8 @@ function maybeNotifyPressBroken ({item, logger, isProd, callback, lambda}) {
     const errorCount = attributes.errorCount
         ? parseInt(item.Attributes.errorCount.N, 10) : 0;
     const frontId = attributes.frontId ? attributes.frontId.S : 'unknown';
+    const error = attributes.messageText ? attributes.messageText.S : 'unknown error';
+
     if (isProd && errorCount >= ERROR_THRESHOLD) {
         logger.log('Sending email');
         lambda.invoke({
@@ -135,7 +137,8 @@ function maybeNotifyPressBroken ({item, logger, isProd, callback, lambda}) {
                     front: frontId,
                     stage: attributes.stageName ? attributes.stageName.S : 'unknown',
                     count: errorCount,
-                    faciaPath: config.facia[STAGE].path
+                    faciaPath: config.facia[STAGE].path,
+                    error: error
                 }
             })
         }, (err) => {
