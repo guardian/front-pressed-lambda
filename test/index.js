@@ -67,7 +67,7 @@ ava.test('dynamo DB error makes the lambda fail', function (test) {
         });
 });
 
-ava.test('send email when error count is above threshold on PROD', function (test) {
+ava.test('send email when error count is above threshold on PROD and live', function (test) {
     test.plan(4);
 
     const dynamo = {
@@ -76,6 +76,7 @@ ava.test('send email when error count is above threshold on PROD', function (tes
             test.deepEqual(record.ExpressionAttributeValues[':time'].S, date);
             callback(null, {
                 Attributes: {
+                    stageName: { S: 'live' },
                     statusCode: { S: 'success' },
                     frontId: { S: record.Key.frontId.S },
                     errorCount: { N: '4' }
@@ -95,7 +96,7 @@ ava.test('send email when error count is above threshold on PROD', function (tes
     return invoke(kinesisEvent.withoutError, dynamo, lambda, true);
 });
 
-ava.test('does not send email on code even when error count is above threshold', function (test) {
+ava.test('does not send email on CODE even when error count is above threshold', function (test) {
     test.plan(2);
 
     const dynamo = {
@@ -104,6 +105,34 @@ ava.test('does not send email on code even when error count is above threshold',
             test.deepEqual(record.ExpressionAttributeValues[':time'].S, date);
             callback(null, {
                 Attributes: {
+                    stageName: { S: 'live' },
+                    statusCode: { S: 'success' },
+                    frontId: { S: record.Key.frontId.S },
+                    errorCount: { N: '4' }
+                }
+            });
+        }
+    };
+    const lambda = {
+        invoke (invocation, callback) {
+            test.fail('Lambda should not be invoked');
+            callback(new Error('Lambda should not be invoked'));
+        }
+    };
+
+    return invoke(kinesisEvent.withoutError, dynamo, lambda, false);
+});
+
+ava.test('does not send email on DRAFT even when error count is above threshold', function (test) {
+    test.plan(2);
+
+    const dynamo = {
+        updateItem: function (record, callback) {
+            test.deepEqual(record.Key.frontId.S, 'myFront');
+            test.deepEqual(record.ExpressionAttributeValues[':time'].S, date);
+            callback(null, {
+                Attributes: {
+                    stageName: { S: 'draft' },
                     statusCode: { S: 'success' },
                     frontId: { S: record.Key.frontId.S },
                     errorCount: { N: '4' }

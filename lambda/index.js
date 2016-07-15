@@ -122,8 +122,9 @@ function maybeNotifyPressBroken ({item, logger, isProd, callback, lambda}) {
         ? parseInt(item.Attributes.errorCount.N, 10) : 0;
     const frontId = attributes.frontId ? attributes.frontId.S : 'unknown';
     const error = attributes.messageText ? attributes.messageText.S : 'unknown error';
+    const isLive = attributes.stageName ? attributes.stageName.S === 'live' : false;
 
-    if (isProd && errorCount >= ERROR_THRESHOLD) {
+    if (isProd && isLive && errorCount >= ERROR_THRESHOLD) {
         logger.log('Sending email');
         lambda.invoke({
             FunctionName: config.email.lambda,
