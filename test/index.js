@@ -3,10 +3,10 @@ import {storeEvents} from '../tmp/lambda/index';
 import kinesisEvent from './fixtures/kinesisEvent.fixture';
 
 const date = new Date('2016-03-24').toISOString();
-function invoke (event, dynamo, lambda, prod) {
+function invoke (event, dynamo, post, prod) {
     return new Promise((resolve, reject) => {
         storeEvents({
-            event, dynamo, lambda, isoDate: date, isProd: !!prod, logger: {
+            event, dynamo, post, isoDate: date, isProd: !!prod, logger: {
                 error () {}, log () {}
             }, callback (err) {
                 if (err) {
@@ -68,7 +68,7 @@ ava.test('dynamo DB error makes the lambda fail', function (test) {
 });
 
 ava.test('send email when error count is above threshold on PROD and live', function (test) {
-    test.plan(4);
+    test.plan(5);
 
     const dynamo = {
         updateItem: function (record, callback) {
@@ -84,16 +84,15 @@ ava.test('send email when error count is above threshold on PROD and live', func
             });
         }
     };
-    const lambda = {
-        invoke (invocation, callback) {
-            const payload = JSON.parse(invocation.Payload);
-            test.is(payload.env.front, 'myFront');
-            test.is(payload.env.count, 4);
-            callback();
-        }
+    const post = function (request) {
+        const body = JSON.parse(request.body);
+        test.regex(request.url, /pagerduty/);
+        test.is(body.event_type, 'trigger');
+        test.regex(body.description, /myFront.*failed.*live.*4 times.*/i);
+        return Promise.resolve();
     };
 
-    return invoke(kinesisEvent.withoutError, dynamo, lambda, true);
+    return invoke(kinesisEvent.withoutError, dynamo, post, true);
 });
 
 ava.test('does not send email on CODE even when error count is above threshold', function (test) {
@@ -113,14 +112,12 @@ ava.test('does not send email on CODE even when error count is above threshold',
             });
         }
     };
-    const lambda = {
-        invoke (invocation, callback) {
-            test.fail('Lambda should not be invoked');
-            callback(new Error('Lambda should not be invoked'));
-        }
+    const post = function () {
+        test.fail('Pagerduty should not be called');
+        return Promise.reject();
     };
 
-    return invoke(kinesisEvent.withoutError, dynamo, lambda, false);
+    return invoke(kinesisEvent.withoutError, dynamo, post, false);
 });
 
 ava.test('does not send email on DRAFT even when error count is above threshold', function (test) {
@@ -140,12 +137,10 @@ ava.test('does not send email on DRAFT even when error count is above threshold'
             });
         }
     };
-    const lambda = {
-        invoke (invocation, callback) {
-            test.fail('Lambda should not be invoked');
-            callback(new Error('Lambda should not be invoked'));
-        }
+    const post = function () {
+        test.fail('Lambda should not be invoked');
+        return Promise.reject();
     };
 
-    return invoke(kinesisEvent.withoutError, dynamo, lambda, false);
+    return invoke(kinesisEvent.withoutError, dynamo, post, false);
 });

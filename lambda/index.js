@@ -2,6 +2,7 @@ import config from '../tmp/config.json';
 import AWS from 'aws-sdk';
 import mapLimit from 'async-es/mapLimit';
 import emailTemplate from './email-template';
+import { post as postUtil } from 'simple-get-promise';
 
 AWS.config.region = config.AWS.region;
 
@@ -39,18 +40,18 @@ export function handler (event, context, callback) {
             const lambda = new AWS.Lambda({
                 credentials: assumedCredentials
             });
-            storeEvents({event, dynamo, lambda, isoDate: today.toISOString(), logger: console, callback, isProd: STAGE === 'PROD'});
+            storeEvents({event, dynamo, lambda, isoDate: today.toISOString(), logger: console, callback, isProd: STAGE === 'PROD', post: postUtil});
         }
     });
 }
 
-export function storeEvents ({event, callback, dynamo, isoDate, logger, lambda, isProd}) {
+export function storeEvents ({event, callback, dynamo, isoDate, logger, post, isProd}) {
     const jobs = { started: 0, completed: 0, total: event.Records.length };
 
     mapLimit(
         event.Records,
         PARALLEL_JOBS,
-        (record, jobCallback) => putRecordToDynamo({jobs, record, dynamo, isoDate, logger, isProd, callback: jobCallback, lambda}),
+        (record, jobCallback) => putRecordToDynamo({jobs, record, dynamo, isoDate, logger, isProd, callback: jobCallback, post}),
         err => {
             if (err) {
                 logger.error('Error processing records', err);
@@ -63,7 +64,7 @@ export function storeEvents ({event, callback, dynamo, isoDate, logger, lambda, 
     );
 }
 
-function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, logger, lambda}) {
+function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, logger, post}) {
     const jobId = ++jobs.started;
 
     logger.log('Process job ' + jobId + ' in ' + record.kinesis.sequenceNumber);
@@ -80,7 +81,7 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, lo
     }
     const updateExpression = Object.keys(action).map(key => `${key} ${action[key].join(', ')}`).join(' ');
 
-    return dynamo.updateItem({
+    dynamo.updateItem({
         TableName: TABLE_NAME,
         Key: {
             stageName: {
@@ -111,12 +112,14 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, lo
             logger.error('Error while processing ' + jobId, err);
             callback(err);
         } else {
-            maybeNotifyPressBroken({item: updatedItem, logger, isProd, callback, lambda});
+            maybeNotifyPressBroken({item: updatedItem, logger, isProd, post})
+            .then(() => callback())
+            .catch(callback);
         }
     });
 }
 
-function maybeNotifyPressBroken ({item, logger, isProd, callback, lambda}) {
+function maybeNotifyPressBroken ({item, logger, isProd, post}) {
     const attributes = item ? item.Attributes : {};
     const errorCount = attributes.errorCount
         ? parseInt(item.Attributes.errorCount.N, 10) : 0;
@@ -125,30 +128,24 @@ function maybeNotifyPressBroken ({item, logger, isProd, callback, lambda}) {
     const isLive = attributes.stageName ? attributes.stageName.S === 'live' : false;
 
     if (isProd && isLive && errorCount >= ERROR_THRESHOLD) {
-        logger.log('Sending email');
-        lambda.invoke({
-            FunctionName: config.email.lambda,
-            InvocationType: 'Event',
-            Payload: JSON.stringify({
-                from: config.email.from,
-                to: config.email.to,
-                subject: 'Front press error',
-                template: emailTemplate,
-                env: {
+        logger.log('Notifying pagerduty');
+        return post({
+            url: 'https://events.pagerduty.com/generic/2010-04-15/create_event.json',
+            body: JSON.stringify({
+                // eslint-disable-next-line camelcase
+                service_key: config.pagerduty.key,
+                // eslint-disable-next-line camelcase
+                event_type: 'trigger',
+                description: emailTemplate({
                     front: frontId,
                     stage: attributes.stageName ? attributes.stageName.S : 'unknown',
                     count: errorCount,
                     faciaPath: config.facia[STAGE].path,
                     error: error
-                }
+                })
             })
-        }, (err) => {
-            if (err) {
-                logger.error(err);
-            }
-            callback();
         });
     } else {
-        process.nextTick(() => callback());
+        return Promise.resolve();
     }
 }

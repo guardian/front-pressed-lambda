@@ -8,7 +8,9 @@ export default {
 	plugins: [
 		json(),
 		babel(),
-		nodeResolve(),
+		nodeResolve({
+			jsnext: true
+		}),
 		commonjs()
 	],
 	format: 'cjs',
