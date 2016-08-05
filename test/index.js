@@ -88,7 +88,7 @@ ava.test('send email when error count is above threshold on PROD and live', func
         const body = JSON.parse(request.body);
         test.regex(request.url, /pagerduty/);
         test.is(body.event_type, 'trigger');
-        test.regex(body.description, /myFront.*failed.*live.*4 times.*/i);
+        test.regex(body.description, /myFront/i);
         return Promise.resolve();
     };
 

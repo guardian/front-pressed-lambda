@@ -1,7 +1,6 @@
 import config from '../tmp/config.json';
 import AWS from 'aws-sdk';
 import mapLimit from 'async-es/mapLimit';
-import emailTemplate from './email-template';
 import { post as postUtil } from 'simple-get-promise';
 
 AWS.config.region = config.AWS.region;
@@ -136,13 +135,18 @@ function maybeNotifyPressBroken ({item, logger, isProd, post}) {
                 service_key: config.pagerduty.key,
                 // eslint-disable-next-line camelcase
                 event_type: 'trigger',
-                description: emailTemplate({
+                // eslint-disable-next-line camelcase
+                incident_key: frontId,
+                description: `Front ${frontId} failed pressing`,
+                details: {
                     front: frontId,
                     stage: attributes.stageName ? attributes.stageName.S : 'unknown',
                     count: errorCount,
-                    faciaPath: config.facia[STAGE].path,
                     error: error
-                })
+                },
+                client: 'Press monitor',
+                // eslint-disable-next-line camelcase
+                client_url: `${config.facia[STAGE].path}/troubleshoot/stale/${frontId}`
             })
         });
     } else {
