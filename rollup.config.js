@@ -11,7 +11,9 @@ export default {
 		nodeResolve({
 			jsnext: true
 		}),
-		commonjs()
+		commonjs({
+      exclude: ['node_modules/lodash-es/**']
+    })
 	],
 	format: 'cjs',
 	dest: 'tmp/lambda/index.js',
