@@ -6,6 +6,7 @@ import { post as postUtil } from 'simple-get-promise';
 AWS.config.region = config.AWS.region;
 
 const ERROR_THRESHOLD = 3;
+const TOTAL_ERRORS_THRESHOLD = 10; //TODO: Validate & change this value
 const PARALLEL_JOBS = 4;
 const STAGE = (process.env.AWS_LAMBDA_FUNCTION_NAME || 'CODE')
     .split('-')
@@ -13,6 +14,7 @@ const STAGE = (process.env.AWS_LAMBDA_FUNCTION_NAME || 'CODE')
     .pop();
 const ROLE_TO_ASSUME = config.AWS.roleToAssume[STAGE];
 const TABLE_NAME = config.dynamo[STAGE].tableName;
+const ERRORS_TABLE_NAME = config.dynamo[STAGE].errorsTableName;
 
 export function handler (event, context, callback) {
     const today = new Date();
@@ -111,6 +113,7 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, lo
             logger.error('Error while processing ' + jobId, err);
             callback(err);
         } else {
+            logError(data.frontId, new Date().getTime, logger, dynamo);
             maybeNotifyPressBroken({item: updatedItem, logger, isProd, post})
             .then(() => callback())
             .catch(callback);
@@ -125,8 +128,9 @@ function maybeNotifyPressBroken ({item, logger, isProd, post}) {
     const frontId = attributes.frontId ? attributes.frontId.S : 'unknown';
     const error = attributes.messageText ? attributes.messageText.S : 'unknown error';
     const isLive = attributes.stageName ? attributes.stageName.S === 'live' : false;
+    const currentTotalErrors = getCurrentTotalErrors(logger, dynamo)
 
-    if (isProd && isLive && errorCount >= ERROR_THRESHOLD) {
+    if (isProd && isLive && errorCount >= ERROR_THRESHOLD && currentTotalErrors !>= TOTAL_ERRORS_THRESHOLD) {
         logger.log('Notifying pagerduty');
         return post({
             url: 'https://events.pagerduty.com/generic/2010-04-15/create_event.json',
@@ -153,3 +157,53 @@ function maybeNotifyPressBroken ({item, logger, isProd, post}) {
         return Promise.resolve();
     }
 }
+
+//table to contain time as errorId as primary key, time and frontId
+
+function getCurrentTotalErrors(logger, dynamo) {
+  var params = {
+        TableName: errorsTableName
+      }
+  dynamo.scan(params, function(err, data) {
+    if (err) {
+      logger.error("Unable to retrieve total errors from Dynamo");
+    }
+    else {
+      data.Count;
+    }
+  });
+}
+
+function logError(frontId, time, logger, dynamo) {
+  var params = {
+    Item: {
+     "errorId": {
+       S: uuidv4()
+      },
+     "time": {
+       I: time
+       },
+     "frontId": {
+       S: frontId
+       }
+    },
+    TableName: errorsTableName
+  }
+  dynamo.putItem(params, function (err, data) {
+    if (err) logger.error("Unable to write item to table. Item = ${params.Item}");
+    else data
+  })
+}
+
+function uuidv4() {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
+//TODO:
+//1. Log errors
+//2. Scan error table and get size
+//3. Only alert if total errors not more than x
+//4. On first error over total threshold, send pager duty event to warn of high number alerts
