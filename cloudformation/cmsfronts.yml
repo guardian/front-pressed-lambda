@@ -115,10 +115,10 @@ Resources:
                     AttributeType: S
                 -
                     AttributeName: time
-                    AttributeType: I
+                    AttributeType: N
                 -
                     AttributeName: expirationTime
-                    AttributeType: I
+                    AttributeType: N
                 -
                     AttributeName: frontId
                     AttributeType: S
