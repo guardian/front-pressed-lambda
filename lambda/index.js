@@ -113,7 +113,9 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, lo
             logger.error('Error while processing ' + jobId, err);
             callback(err);
         } else {
-            logError(data.frontId, new Date().getTime, logger, dynamo);
+            var currentTime = new Date().getTime
+            var expireTime = currentTime + 900000 // Adds 15 mins
+            logError(data.frontId, currentTime, expireTime, logger, dynamo);
             maybeNotifyPressBroken({item: updatedItem, logger, isProd, post})
             .then(() => callback())
             .catch(callback);
@@ -161,10 +163,15 @@ function maybeNotifyPressBroken ({item, logger, isProd, post}) {
 //table to contain time as errorId as primary key, time and frontId
 
 function getCurrentTotalErrors(logger, dynamo) {
+  var timeRange = new Date().getTime - 900000
   var params = {
-        TableName: errorsTableName
-      }
-  dynamo.scan(params, function(err, data) {
+        TableName: errorsTableName,
+        KeyConditionExpression: "time > :maxTime",
+        ExpressionAttributeValues: {
+          "maxTime":timeRange
+        }
+      };
+  dynamo.query(params, function(err, data) {
     if (err) {
       logger.error("Unable to retrieve total errors from Dynamo");
     }
@@ -174,7 +181,7 @@ function getCurrentTotalErrors(logger, dynamo) {
   });
 }
 
-function logError(frontId, time, logger, dynamo) {
+function logError(frontId, time, expirationTime, logger, dynamo) {
   var params = {
     Item: {
      "errorId": {
@@ -182,6 +189,9 @@ function logError(frontId, time, logger, dynamo) {
       },
      "time": {
        I: time
+       },
+     "expirationTime": {
+       I: expirationTime
        },
      "frontId": {
        S: frontId
