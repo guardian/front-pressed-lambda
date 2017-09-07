@@ -106,43 +106,43 @@ Resources:
                         - StageMap
                         - Ref: Stage
                         - WriteThroughput
-      ErrorsTable:
-          Type: AWS::DynamoDB::Table
-          Properties:
-              AttributeDefinitions:
-                  -
-                      AttributeName: errorId
-                      AttributeType: S
-                  -
-                      AttributeName: time
-                      AttributeType: I
-                  -
-                      AttributeName: expirationTime
-                      AttributeType: I
-                  -
-                      AttributeName: frontId
-                      AttributeType: S
-              KeySchema:
-                  -
-                      AttributeName: errorId
-                      KeyType: HASH
-                  -
-                      AttributeName: time
-                      KeyType: RANGE
-              ProvisionedThroughput:
-                  ReadCapacityUnits:
-                      Fn::FindInMap:
-                          - StageMap
-                          - Ref: Stage
-                          - ReadThroughput
-                  WriteCapacityUnits:
-                      Fn::FindInMap:
-                          - StageMap
-                          - Ref: Stage
-                          - WriteThroughput
-                TimeToLiveSpecification:
-                  AttributeName: expirationTime
-                  Enabled: true
+    ErrorsTable:
+        Type: AWS::DynamoDB::Table
+        Properties:
+            AttributeDefinitions:
+                -
+                    AttributeName: errorId
+                    AttributeType: S
+                -
+                    AttributeName: time
+                    AttributeType: I
+                -
+                    AttributeName: expirationTime
+                    AttributeType: I
+                -
+                    AttributeName: frontId
+                    AttributeType: S
+            KeySchema:
+                -
+                    AttributeName: errorId
+                    KeyType: HASH
+                -
+                    AttributeName: time
+                    KeyType: RANGE
+            ProvisionedThroughput:
+                ReadCapacityUnits:
+                    Fn::FindInMap:
+                        - StageMap
+                        - Ref: Stage
+                        - ReadThroughput
+                WriteCapacityUnits:
+                    Fn::FindInMap:
+                        - StageMap
+                        - Ref: Stage
+                        - WriteThroughput
+            TimeToLiveSpecification:
+                AttributeName: expirationTime
+                Enabled: true
     SendEmail:
         Type: AWS::IAM::Policy
         Properties:
