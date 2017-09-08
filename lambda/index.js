@@ -113,26 +113,26 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, lo
             logger.error('Error while processing ' + jobId, err);
             callback(err);
         } else {
-            var currentTime = new Date().getTime
-            var expireTime = currentTime + 900000 // Adds 15 mins
+            var currentTime = new Date().getTime;
+            var expireTime = currentTime + 900000; // Adds 15 mins
             logError(data.frontId, currentTime, expireTime, logger, dynamo);
-            maybeNotifyPressBroken({item: updatedItem, logger, isProd, post})
+            maybeNotifyPressBroken({item: updatedItem, logger, isProd, post, dynamo})
             .then(() => callback())
             .catch(callback);
         }
     });
 }
 
-function maybeNotifyPressBroken ({item, logger, isProd, post}) {
+function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo}) {
     const attributes = item ? item.Attributes : {};
     const errorCount = attributes.errorCount
         ? parseInt(item.Attributes.errorCount.N, 10) : 0;
     const frontId = attributes.frontId ? attributes.frontId.S : 'unknown';
     const error = attributes.messageText ? attributes.messageText.S : 'unknown error';
     const isLive = attributes.stageName ? attributes.stageName.S === 'live' : false;
-    const currentTotalErrors = getCurrentTotalErrors(logger, dynamo)
+    const currentTotalErrors = getCurrentTotalErrors(logger, dynamo);
 
-    if (isProd && isLive && errorCount >= ERROR_THRESHOLD && currentTotalErrors !>= TOTAL_ERRORS_THRESHOLD) {
+    if (isProd && isLive && errorCount >= ERROR_THRESHOLD && currentTotalErrors <= TOTAL_ERRORS_THRESHOLD) {
         logger.log('Notifying pagerduty');
         return post({
             url: 'https://events.pagerduty.com/generic/2010-04-15/create_event.json',
@@ -162,18 +162,18 @@ function maybeNotifyPressBroken ({item, logger, isProd, post}) {
 
 //table to contain time as errorId as primary key, time and frontId
 
-function getCurrentTotalErrors(logger, dynamo) {
-  var timeRange = new Date().getTime - 900000
+function getCurrentTotalErrors (logger, dynamo) {
+  var timeRange = new Date().getTime - 900000;
   var params = {
-        TableName: errorsTableName,
-        KeyConditionExpression: "time > :maxTime",
+        TableName: ERRORS_TABLE_NAME,
+        KeyConditionExpression: 'time > :maxTime',
         ExpressionAttributeValues: {
-          "maxTime":timeRange
+          'maxTime':timeRange
         }
       };
   dynamo.query(params, function(err, data) {
     if (err) {
-      logger.error("Unable to retrieve total errors from Dynamo");
+      logger.error('Unable to retrieve total errors from Dynamo');
     }
     else {
       data.Count;
@@ -181,39 +181,33 @@ function getCurrentTotalErrors(logger, dynamo) {
   });
 }
 
-function logError(frontId, time, expirationTime, logger, dynamo) {
+function logError (frontId, time, expirationTime, logger, dynamo) {
   var params = {
     Item: {
-     "errorId": {
+     'errorId': {
        S: uuidv4()
       },
-     "time": {
+     'time': {
        I: time
        },
-     "expirationTime": {
+     'expirationTime': {
        I: expirationTime
        },
-     "frontId": {
+     'frontId': {
        S: frontId
        }
     },
-    TableName: errorsTableName
-  }
+    TableName: ERRORS_TABLE_NAME
+  };
   dynamo.putItem(params, function (err, data) {
-    if (err) logger.error("Unable to write item to table. Item = ${params.Item}");
-    else data
-  })
+    if (err) logger.error('Unable to write item to table. Item = ${params.Item}');
+    else return data;
+  });
 }
 
-function uuidv4() {
-  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+function uuidv4 () {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function (c) {
     var r = Math.random() * 16 | 0, v = c == 'x' ? r : (r & 0x3 | 0x8);
     return v.toString(16);
   });
 }
-
-//TODO:
-//1. Log errors
-//2. Scan error table and get size
-//3. Only alert if total errors not more than x
-//4. On first error over total threshold, send pager duty event to warn of high number alerts
