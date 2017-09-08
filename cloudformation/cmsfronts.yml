@@ -109,6 +109,7 @@ Resources:
     ErrorsTable:
         Type: AWS::DynamoDB::Table
         Properties:
+            TableName: !Join [ "", ["front-pressed-lambda-errors-", !Ref 'Stage'] ]
             AttributeDefinitions:
                 -
                     AttributeName: errorId
@@ -116,12 +117,6 @@ Resources:
                 -
                     AttributeName: time
                     AttributeType: N
-                -
-                    AttributeName: expirationTime
-                    AttributeType: N
-                -
-                    AttributeName: frontId
-                    AttributeType: S
             KeySchema:
                 -
                     AttributeName: errorId
@@ -142,7 +137,7 @@ Resources:
                         - WriteThroughput
             TimeToLiveSpecification:
                 AttributeName: expirationTime
-                Enabled: true
+                Enabled: TRUE
     SendEmail:
         Type: AWS::IAM::Policy
         Properties:
