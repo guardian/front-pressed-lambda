@@ -144,3 +144,5 @@ ava.test('does not send email on DRAFT even when error count is above threshold'
 
     return invoke(kinesisEvent.withoutError, dynamo, post, false);
 });
+
+//TODO: Add more test for exceeding total threshold

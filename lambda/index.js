@@ -113,6 +113,7 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, lo
             logger.error('Error while processing ' + jobId, err);
             callback(err);
         } else {
+          //TODO: Is this in the right place?
             var currentTime = new Date().getTime;
             var expireTime = currentTime + 900000; // Adds 15 mins
             logError(data.frontId, currentTime, expireTime, logger, dynamo);
