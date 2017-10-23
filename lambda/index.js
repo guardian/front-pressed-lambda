@@ -116,10 +116,11 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, lo
           //TODO: Is this in the right place?
             var currentTime = new Date().getTime;
             var expireTime = currentTime + 900000; // Adds 15 mins
-            logError(data.frontId, currentTime, expireTime, logger, dynamo);
-            maybeNotifyPressBroken({item: updatedItem, logger, isProd, post, dynamo})
-            .then(() => callback())
-            .catch(callback);
+            logError(data.frontId, currentTime, expireTime, logger, dynamo, function () {
+              maybeNotifyPressBroken({item: updatedItem, logger, isProd, post, dynamo})
+              .then(() => callback())
+              .catch(callback);
+            });
         }
     });
 }
@@ -131,58 +132,53 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo}) {
     const frontId = attributes.frontId ? attributes.frontId.S : 'unknown';
     const error = attributes.messageText ? attributes.messageText.S : 'unknown error';
     const isLive = attributes.stageName ? attributes.stageName.S === 'live' : false;
-    const currentTotalErrors = getCurrentTotalErrors(logger, dynamo);
 
-    if (isProd && isLive && errorCount >= ERROR_THRESHOLD && currentTotalErrors <= TOTAL_ERRORS_THRESHOLD) {
-        logger.log('Notifying pagerduty');
-        return post({
-            url: 'https://events.pagerduty.com/generic/2010-04-15/create_event.json',
-            body: JSON.stringify({
-                // eslint-disable-next-line camelcase
-                service_key: config.pagerduty.key,
-                // eslint-disable-next-line camelcase
-                event_type: 'trigger',
-                // eslint-disable-next-line camelcase
-                incident_key: frontId,
-                description: `Front ${frontId} failed pressing`,
-                details: {
-                    front: frontId,
-                    stage: attributes.stageName ? attributes.stageName.S : 'unknown',
-                    count: errorCount,
-                    error: error
-                },
-                client: 'Press monitor',
-                // eslint-disable-next-line camelcase
-                client_url: `${config.facia[STAGE].path}/troubleshoot/stale/${frontId}`
-            })
+    if (isProd && isLive && errorCount >= ERROR_THRESHOLD) {
+        var timeRange = new Date().getTime - 900000;
+        var params = {
+          TableName: ERRORS_TABLE_NAME,
+          KeyConditionExpression: 'time > :maxTime',
+          ExpressionAttributeValues: {
+            'maxTime':timeRange
+            }
+          };
+        dynamo.query(params, function (err, data) {
+          if (err) {
+            logger.error('Unable to retrieve total errors from Dynamo');
+          }
+          else {
+            if (data.Count <= TOTAL_ERRORS_THRESHOLD) {
+              logger.log('Notifying pagerduty');
+              return post({
+                  url: 'https://events.pagerduty.com/generic/2010-04-15/create_event.json',
+                  body: JSON.stringify({
+                      // eslint-disable-next-line camelcase
+                      service_key: config.pagerduty.key,
+                      // eslint-disable-next-line camelcase
+                      event_type: 'trigger',
+                      // eslint-disable-next-line camelcase
+                      incident_key: frontId,
+                      description: `Front ${frontId} failed pressing`,
+                      details: {
+                          front: frontId,
+                          stage: attributes.stageName ? attributes.stageName.S : 'unknown',
+                          count: errorCount,
+                          error: error
+                      },
+                      client: 'Press monitor',
+                      // eslint-disable-next-line camelcase
+                      client_url: `${config.facia[STAGE].path}/troubleshoot/stale/${frontId}`
+                  })
+              });
+            }
+          }
         });
     } else {
         return Promise.resolve();
     }
 }
 
-//table to contain time as errorId as primary key, time and frontId
-
-function getCurrentTotalErrors (logger, dynamo) {
-  var timeRange = new Date().getTime - 900000;
-  var params = {
-        TableName: ERRORS_TABLE_NAME,
-        KeyConditionExpression: 'time > :maxTime',
-        ExpressionAttributeValues: {
-          'maxTime':timeRange
-        }
-      };
-  dynamo.query(params, function(err, data) {
-    if (err) {
-      logger.error('Unable to retrieve total errors from Dynamo');
-    }
-    else {
-      data.Count;
-    }
-  });
-}
-
-function logError (frontId, time, expirationTime, logger, dynamo) {
+function logError (frontId, time, expirationTime, logger, dynamo, callback) {
   var params = {
     Item: {
      'errorId': {
@@ -200,9 +196,9 @@ function logError (frontId, time, expirationTime, logger, dynamo) {
     },
     TableName: ERRORS_TABLE_NAME
   };
-  dynamo.putItem(params, function (err, data) {
+  dynamo.putItem(params, function (err) {
     if (err) logger.error('Unable to write item to table. Item = ${params.Item}');
-    else return data;
+    else callback;
   });
 }
 

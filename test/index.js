@@ -29,6 +29,9 @@ ava.test('front pressed correctly is stored correctly', function (test) {
                     statusCode: { S: 'success' }
                 }
             });
+        },
+        putItem: function () {
+          console.log('This should never be reached');
         }
     };
 
