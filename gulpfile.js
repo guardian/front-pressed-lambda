@@ -1,9 +1,9 @@
 var gulp = require('gulp');
 var yaml = require('gulp-yaml');
-var zip = require('gulp-zip');
 process.env.ARTEFACT_PATH = __dirname;
 var riffraff = require('node-riffraff-artefact');
 var path = require('path');
+var exec  = require('exec-chainable');
 
 /* Cloudformation tasks */
 
@@ -21,30 +21,20 @@ gulp.task('cloudformation-dev', ['cloudformation'], function () {
 });
 
 gulp.task('riffraff', function () {
-    return gulp.src('deploy.yml')
+    return gulp.src('riff-raff.yaml')
         .pipe(yaml({ space: 4 }))
         .pipe(gulp.dest('tmp/riffraff'));
 });
 
-gulp.task('archive', function () {
-    return gulp.src(['tmp/lambda/index.js'])
-        .pipe(zip('artifact.zip'))
-        .pipe(gulp.dest('tmp/riffraff/packages/lambda'))
-        .pipe(gulp.dest('tmp/riffraff/packages/s3'));
+gulp.task('compile', function () {
+  return exec('rollup -c rollup.config.js');
 });
 
-gulp.task('package', ['archive', 'riffraff'], function () {
-    return gulp.src(['tmp/riffraff/**/*'])
-        .pipe(zip('artifacts.zip'))
-        .pipe(gulp.dest('tmp'));
-});
-
-gulp.task('deploy', function (cb) {
+gulp.task('deploy', ['compile'], function (cb) {
     riffraff.settings.leadDir = path.join(__dirname, 'tmp/');
 
-    riffraff.s3Upload().then(function () {
-        cb();
-    }).catch(function (error) {
-        cb(error);
-    });
+    riffraff.s3FilesUpload()
+    .then(cb)
+    .catch(cb)
 });
+
