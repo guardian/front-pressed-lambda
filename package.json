@@ -27,7 +27,8 @@
     "rollup-plugin-commonjs": "^3.3.1",
     "rollup-plugin-json": "^2.0.1",
     "rollup-plugin-node-resolve": "^2.0.0",
-    "exec-chainable": "0.0.3"
+    "exec-chainable": "0.0.3",
+    "sinon": "^4.3.0"
   },
   "scripts": {
     "lint": "eslint lambda/*.js test/*.js",
