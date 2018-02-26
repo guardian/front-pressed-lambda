@@ -13,6 +13,8 @@ const STAGE = (process.env.AWS_LAMBDA_FUNCTION_NAME || 'CODE')
     .pop();
 const ROLE_TO_ASSUME = config.AWS.roleToAssume[STAGE];
 const TABLE_NAME = config.dynamo[STAGE].tableName;
+const STALE_ERROR_TRESHOLD_MINUTES = 30;
+const ERRORS_TABLE_NAME = config.dynamo[STAGE].errorsTableName;
 
 export function handler (event, context, callback) {
     const today = new Date();
@@ -39,18 +41,18 @@ export function handler (event, context, callback) {
             const lambda = new AWS.Lambda({
                 credentials: assumedCredentials
             });
-            storeEvents({event, dynamo, lambda, isoDate: today.toISOString(), logger: console, callback, isProd: STAGE === 'PROD', post: postUtil});
+            storeEvents({event, dynamo, lambda, isoDate: today.toISOString(), logger: console, callback, isProd: STAGE === 'PROD', post: postUtil, today: today});
         }
     });
 }
 
-export function storeEvents ({event, callback, dynamo, isoDate, logger, post, isProd}) {
+export function storeEvents ({event, callback, dynamo, isoDate, logger, post, isProd, today}) {
     const jobs = { started: 0, completed: 0, total: event.Records.length };
 
     mapLimit(
         event.Records,
         PARALLEL_JOBS,
-        (record, jobCallback) => putRecordToDynamo({jobs, record, dynamo, isoDate, logger, isProd, callback: jobCallback, post}),
+        (record, jobCallback) => putRecordToDynamo({jobs, record, dynamo, isoDate, logger, isProd, callback: jobCallback, post, today}),
         err => {
             if (err) {
                 logger.error('Error processing records', err);
@@ -63,7 +65,7 @@ export function storeEvents ({event, callback, dynamo, isoDate, logger, post, is
     );
 }
 
-function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, logger, post}) {
+function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, logger, post, today}) {
     const jobId = ++jobs.started;
 
     logger.log('Process job ' + jobId + ' in ' + record.kinesis.sequenceNumber);
@@ -111,45 +113,126 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, lo
             logger.error('Error while processing ' + jobId, err);
             callback(err);
         } else {
-            maybeNotifyPressBroken({item: updatedItem, logger, isProd, post})
-            .then(() => callback())
-            .catch(callback);
+            maybeNotifyPressBroken({item: updatedItem, logger, isProd, post, dynamo, today, callback});
         }
     });
 }
 
-function maybeNotifyPressBroken ({item, logger, isProd, post}) {
+function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, callback}) {
     const attributes = item ? item.Attributes : {};
     const errorCount = attributes.errorCount
         ? parseInt(item.Attributes.errorCount.N, 10) : 0;
-    const frontId = attributes.frontId ? attributes.frontId.S : 'unknown';
     const error = attributes.messageText ? attributes.messageText.S : 'unknown error';
     const isLive = attributes.stageName ? attributes.stageName.S === 'live' : false;
+    if (isLive && errorCount >= ERROR_THRESHOLD) {
 
-    if (isProd && isLive && errorCount >= ERROR_THRESHOLD) {
-        logger.log('Notifying pagerduty');
-        return post({
-            url: 'https://events.pagerduty.com/generic/2010-04-15/create_event.json',
-            body: JSON.stringify({
-                // eslint-disable-next-line camelcase
-                service_key: config.pagerduty.key,
-                // eslint-disable-next-line camelcase
-                event_type: 'trigger',
-                // eslint-disable-next-line camelcase
-                incident_key: frontId,
-                description: `Front ${frontId} failed pressing`,
-                details: {
-                    front: frontId,
-                    stage: attributes.stageName ? attributes.stageName.S : 'unknown',
-                    count: errorCount,
-                    error: error
-                },
-                client: 'Press monitor',
-                // eslint-disable-next-line camelcase
-                client_url: `${config.facia[STAGE].path}/troubleshoot/stale/${frontId}`
-            })
+        dynamo.getItem({
+            TableName: ERRORS_TABLE_NAME,
+            Key: {
+                error: {
+                    S: error
+                }
+            }
+        }, (err, data) => {
+
+            if (err) {
+                logger.error('Error while fetching error item with message ', err);
+                callback();
+            }
+
+            if (data.item) {
+
+                const updateErrorData = {
+                    TableName: ERRORS_TABLE_NAME,
+                    Key: {
+                        error: {
+                            S: error
+                        }
+                    },
+                    AttributeUpdates: {
+                        lastSeen: {
+                            S: today
+                        }
+                    }
+                };
+
+                dynamo.updateItem(updateErrorData, (err, data) => {
+                  data;
+                    if (err) {
+                        logger.error('Error while fetching error item with message ', err);
+                        callback();
+                    } else {
+                        if (data.item.lastSeen.isBefore(today.getMinutes() + STALE_ERROR_TRESHOLD_MINUTES) && isProd) {
+                            return sendAlert(attributes, errorCount, error, dynamo, post, logger)
+                            .then(callback)
+                            .catch(callback);
+                        } else {
+                            callback();
+                        }
+                    }
+                });
+          } else {
+
+              const newErrorData = {
+                  TableName: ERRORS_TABLE_NAME,
+                  Item: {
+                      error: {
+                          S: error
+                      },
+                      ttl: {
+                          N: today.setHours(today.getHours() + 24)
+                      },
+                      lastSeen: {
+                         N: today
+                      }
+                  }
+              };
+
+              dynamo.putItem(newErrorData, (err) => {
+                  if (err) {
+                      logger.error('Error while fetching error item with message ', err);
+                      callback();
+                  } else {
+                      if (isProd) {
+                          return sendAlert(attributes, errorCount, error, dynamo, post, logger)
+                          .then(callback)
+                          .catch(callback);
+                      } else {
+                          callback();
+                      }
+                  }
+              });
+          }
         });
     } else {
-        return Promise.resolve();
+      callback();
     }
+}
+
+function sendAlert (attributes, errorCount, error, dynamo, post, logger) {
+
+  const frontId = attributes.frontId ? attributes.frontId.S : 'unknown';
+  logger.log('Notifying pagerduty');
+
+  return post({
+      url: 'https://events.pagerduty.com/generic/2010-04-15/create_event.json',
+      body: JSON.stringify({
+          // eslint-disable-next-line camelcase
+          service_key: config.pagerduty.key,
+          // eslint-disable-next-line camelcase
+          event_type: 'trigger',
+          // eslint-disable-next-line camelcase
+          incident_key: frontId,
+          description: `Front ${frontId} failed pressing`,
+          details: {
+              front: frontId,
+              stage: attributes.stageName ? attributes.stageName.S : 'unknown',
+              count: errorCount,
+              error: error
+          },
+          client: 'Press monitor',
+          // eslint-disable-next-line camelcase
+          client_url: `${config.facia[STAGE].path}/troubleshoot/stale/${frontId}`
+      })
+  });
 }

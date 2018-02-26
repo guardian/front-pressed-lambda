@@ -4,10 +4,21 @@ import kinesisEvent from './fixtures/kinesisEvent.fixture';
 import sinon from 'sinon';
 
 const date = new Date('2016-03-24').toISOString();
+const dynamoWithGenericPutAndGet = {
+    getItem: function (record, callback) {
+        callback(null, {data: null});
+    },
+    putItem: function (recod, callback) {
+        callback(null, null);
+    }
+};
+
 function invoke (event, dynamo, post, prod) {
+
+    const today = new Date();
     return new Promise((resolve, reject) => {
         storeEvents({
-            event, dynamo, post, isoDate: date, isProd: !!prod, logger: {
+            event, dynamo, post, isoDate: date, isProd: !!prod, today: today, logger: {
                 error () {}, log () {}
             }, callback (err) {
                 if (err) {
@@ -122,7 +133,7 @@ ava.test('dynamo DB error makes the lambda fail', function (test) {
 ava.test('send email when error count is above threshold on PROD and live', function (test) {
     test.plan(3);
 
-    const dynamo = {
+    const dynamo = Object.assign(dynamoWithGenericPutAndGet, {
         updateItem: function (record, callback) {
             callback(null, {
                 Attributes: {
@@ -133,7 +144,7 @@ ava.test('send email when error count is above threshold on PROD and live', func
                 }
             });
         }
-    };
+    });
 
     const post = function () {
         return Promise.resolve();
@@ -172,7 +183,7 @@ ava.test('send email when error count is above threshold on PROD and live', func
 ava.test('does not send email on CODE even when error count is above threshold', function (test) {
     test.plan(2);
 
-    const dynamo = {
+    const dynamo = Object.assign(dynamoWithGenericPutAndGet, {
         updateItem: function (record, callback) {
             callback(null, {
                 Attributes: {
@@ -183,7 +194,8 @@ ava.test('does not send email on CODE even when error count is above threshold',
                 }
             });
         }
-    };
+    });
+
     const post = function () {
         return Promise.resolve;
     };
@@ -199,7 +211,7 @@ ava.test('does not send email on CODE even when error count is above threshold',
 ava.test('does not send email on DRAFT even when error count is above threshold', function (test) {
     test.plan(2);
 
-    const dynamo = {
+    const dynamo = Object.assign(dynamoWithGenericPutAndGet, {
         updateItem: function (record, callback) {
             callback(null, {
                 Attributes: {
@@ -210,10 +222,12 @@ ava.test('does not send email on DRAFT even when error count is above threshold'
                 }
             });
         }
-    };
+    });
+
     const post = function () {
         return Promise.resolve;
     };
+
     const dynamoSpy = sinon.spy(dynamo, 'updateItem');
     const postSpy = sinon.spy(post);
 
