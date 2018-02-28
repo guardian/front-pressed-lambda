@@ -151,12 +151,7 @@ Resources:
             Code:
                 S3Bucket:
                     Ref: DistBucket
-                S3Key:
-                    "Fn::Join":
-                        - "/"
-                        -
-                            - Ref: Stage
-                            - artifact.zip
+                S3Key: !Sub '${Stack}/${Stage}/front-pressed-lambda/front-pressed-lambda.zip'
             Description: Store press notification in Dynamo
             Handler: index.handler
             MemorySize: 128

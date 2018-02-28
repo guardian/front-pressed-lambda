@@ -4,6 +4,10 @@
   "main": "lambda/index.js",
   "version": "0.0.1",
   "license": "Apache-2.0",
+  "cloudformation": false,
+  "buildDir": "tmp/lambda",
+  "isAwsLambda": true,
+  "riffraffFile": "./riff-raff.yaml",
   "devDependencies": {
     "ava": "^0.15.2",
     "aws-sdk": "^2.4.13",
@@ -17,13 +21,13 @@
     "gulp": "^3.9.1",
     "gulp-babel": "^6.1.2",
     "gulp-yaml": "^1.0.1",
-    "gulp-zip": "^3.2.0",
-    "node-riffraff-artefact": "^1.7.2",
+    "node-riffraff-artefact": "^2.0.1",
     "rollup": "^0.34.3",
     "rollup-plugin-babel": "^2.6.1",
     "rollup-plugin-commonjs": "^3.3.1",
     "rollup-plugin-json": "^2.0.1",
-    "rollup-plugin-node-resolve": "^2.0.0"
+    "rollup-plugin-node-resolve": "^2.0.0",
+    "exec-chainable": "0.0.3"
   },
   "scripts": {
     "lint": "eslint lambda/*.js test/*.js",
@@ -32,8 +36,7 @@
     "rollup": "rollup -c",
     "secrets": "./bin/get-secrets.sh $FRONT_PRESSED_LAMBDA_BUCKET > tmp/config.json",
     "bundle": "mkdir -p tmp && npm run secrets && npm run rollup",
-    "package": "npm run bundle && gulp package",
-    "deploy": "npm run package && gulp deploy"
+    "deploy": "gulp deploy && VERBOSE=true ARTEFACT_PATH=$PWD riffraff-artefact"
   },
   "dependencies": {
     "async-es": "^2.0.1",
