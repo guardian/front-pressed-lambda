@@ -13,7 +13,7 @@ const STAGE = (process.env.AWS_LAMBDA_FUNCTION_NAME || 'CODE')
     .pop();
 const ROLE_TO_ASSUME = config.AWS.roleToAssume[STAGE];
 const TABLE_NAME = config.dynamo[STAGE].tableName;
-const STALE_ERROR_TRESHOLD_MINUTES = 30;
+const STALE_ERROR_THRESHOLD_MINUTES = 30;
 const ERRORS_TABLE_NAME = config.dynamo[STAGE].errorsTableName;
 
 export function handler (event, context, callback) {
@@ -123,6 +123,7 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
     const errorCount = attributes.errorCount
         ? parseInt(item.Attributes.errorCount.N, 10) : 0;
     const error = attributes.messageText ? attributes.messageText.S : 'unknown error';
+
     const isLive = attributes.stageName ? attributes.stageName.S === 'live' : false;
     if (isLive && errorCount >= ERROR_THRESHOLD) {
 
@@ -140,7 +141,7 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                 callback();
             }
 
-            if (data.item) {
+            if (data.Item) {
 
                 const updateErrorData = {
                     TableName: ERRORS_TABLE_NAME,
@@ -151,18 +152,22 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                     },
                     AttributeUpdates: {
                         lastSeen: {
-                            S: today
+                            Value: {
+                                N: today.valueOf()
+                            },
+                            Action: 'PUT'
                         }
                     }
                 };
 
-                dynamo.updateItem(updateErrorData, (err, data) => {
-                  data;
+                dynamo.updateItem(updateErrorData, (err) => {
                     if (err) {
                         logger.error('Error while fetching error item with message ', err);
                         callback();
                     } else {
-                        if (data.item.lastSeen.isBefore(today.getMinutes() + STALE_ERROR_TRESHOLD_MINUTES) && isProd) {
+                        const lastSeen = new Date(data.Item.lastSeen.N);
+                        const lastSeenThreshold = new Date().setMinutes(today.getMinutes() - STALE_ERROR_THRESHOLD_MINUTES);
+                        if (lastSeen.valueOf() < lastSeenThreshold && isProd) {
                             return sendAlert(attributes, errorCount, error, dynamo, post, logger)
                             .then(callback)
                             .catch(callback);
@@ -180,10 +185,10 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                           S: error
                       },
                       ttl: {
-                          N: today.setHours(today.getHours() + 24)
+                          N: new Date().setHours(today.getHours() + 24).valueOf()
                       },
                       lastSeen: {
-                         N: today
+                         N: today.valueOf()
                       }
                   }
               };
