@@ -2,6 +2,7 @@ import config from '../tmp/config.json';
 import AWS from 'aws-sdk';
 import mapLimit from 'async-es/mapLimit';
 import { post as postUtil } from 'simple-get-promise';
+import errorParser from './util/errorParser';
 
 AWS.config.region = config.AWS.region;
 
@@ -122,7 +123,7 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
     const attributes = item ? item.Attributes : {};
     const errorCount = attributes.errorCount
         ? parseInt(item.Attributes.errorCount.N, 10) : 0;
-    const error = attributes.messageText ? attributes.messageText.S : 'unknown error';
+    const error = errorParser.parse(attributes.messageText ? attributes.messageText.S : 'unknown error');
 
     const isLive = attributes.stageName ? attributes.stageName.S === 'live' : false;
     if (isLive && errorCount >= ERROR_THRESHOLD) {
@@ -241,3 +242,4 @@ function sendAlert (attributes, errorCount, error, dynamo, post, logger) {
       })
   });
 }
+

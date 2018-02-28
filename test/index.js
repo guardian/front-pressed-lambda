@@ -1,7 +1,8 @@
 import ava from 'ava';
+import sinon from 'sinon';
 import {storeEvents} from '../tmp/lambda/index';
 import kinesisEvent from './fixtures/kinesisEvent.fixture';
-import sinon from 'sinon';
+import errorParser from '../lambda/util/errorParser';
 
 const date = new Date('2016-03-24').toISOString();
 const dynamoWithGenericPutAndGet = {
@@ -30,6 +31,19 @@ function invoke (event, dynamo, post, prod, today) {
         });
     });
 }
+
+ava.test('error with parenthesis is parsed correctly', function (test) {
+    const topLevelError = 'Some(my.test.error: error)';
+    const error = topLevelError + ' There was an error';
+    const parsedError = errorParser.parse(error);
+    test.is(parsedError, topLevelError);
+});
+
+ava.test('error without parenthesis gets parsed correctly', function (test) {
+    const error = ' There was an error';
+    const parsedError = errorParser.parse(error);
+    test.is(parsedError, error);
+});
 
 ava.test('front pressed correctly is stored correctly', function (test) {
     const dynamo = {
