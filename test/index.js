@@ -13,6 +13,24 @@ const dynamoWithGenericPutAndGet = {
         callback(null, null);
     }
 };
+
+function dynamoUpdateForErrors (record, callback) {
+    if (record.Key.frontId) {
+        callback(null, {
+            Attributes: {
+                stageName: { S: 'live' },
+                statusCode: { S: 'success' },
+                frontId: { S: record.Key.frontId.S },
+                errorCount: { N: '4' },
+                messageText: { S: 'error' }
+            }
+        });
+
+    } else {
+      callback(null, null);
+    }
+}
+
 const today = new Date();
 
 function invoke (event, dynamo, post, prod, today) {
@@ -311,22 +329,8 @@ ava.test('send email when seeing an old error', function (test) {
     test.plan(4);
 
     const dynamo = {
-        updateItem: function (record, callback) {
 
-            if (record.Key.frontId) {
-                callback(null, {
-                    Attributes: {
-                        stageName: { S: 'live' },
-                        statusCode: { S: 'success' },
-                        frontId: { S: record.Key.frontId.S },
-                        errorCount: { N: '4' },
-                        messageText: { S: 'error' }
-                    }
-                });
-            } else {
-              callback(null, null);
-            }
-        },
+        updateItem: dynamoUpdateForErrors,
 
         getItem: function (record, callback) {
             callback(null, {
@@ -381,23 +385,7 @@ ava.test('do not send an email if error has been seen recently', function (test)
     test.plan(4);
 
     const dynamo = {
-        updateItem: function (record, callback) {
-
-            if (record.Key.frontId) {
-                callback(null, {
-                    Attributes: {
-                        stageName: { S: 'live' },
-                        statusCode: { S: 'success' },
-                        frontId: { S: record.Key.frontId.S },
-                        errorCount: { N: '4' },
-                        messageText: { S: 'error' }
-                    }
-                });
-
-            } else {
-              callback(null, null);
-            }
-        },
+        updateItem: dynamoUpdateForErrors,
 
         getItem: function (record, callback) {
             callback(null, {
