@@ -12,6 +12,7 @@ const dynamoWithGenericPutAndGet = {
     putItem: function (recod, callback) {
         callback(null, null);
     }
+
 };
 
 function dynamoUpdateForErrors (record, callback) {
@@ -318,7 +319,7 @@ ava.test('send email when seeing a new error', function (test) {
     test.true(dynamoPutSpy.calledWith(
         sinon.match.has(
             'Item', sinon.match.has(
-                'lastSeen', sinon.match.has('N', today.valueOf())
+                'lastSeen', sinon.match.has('N', today.valueOf().toString())
             )
         )
     ));
@@ -372,7 +373,7 @@ ava.test('send email when seeing an old error', function (test) {
         sinon.match.has(
             'AttributeUpdates', sinon.match.has(
                 'lastSeen', sinon.match.has(
-                    'Value', sinon.match.has('N', today.valueOf())
+                    'Value', sinon.match.has('N', today.valueOf().toString())
                   )
             )
         )
@@ -390,7 +391,7 @@ ava.test('do not send an email if error has been seen recently', function (test)
             callback(null, {
                 Item: {
                     error: { S: 'error'},
-                    lastSeen: { N: today.valueOf() }
+                    lastSeen: { N: today.valueOf().toString() }
                 }
             });
         }
@@ -422,7 +423,7 @@ ava.test('do not send an email if error has been seen recently', function (test)
         sinon.match.has(
             'AttributeUpdates', sinon.match.has(
                 'lastSeen', sinon.match.has(
-                    'Value', sinon.match.has('N', today.valueOf())
+                    'Value', sinon.match.has('N', today.valueOf().toString())
                   )
             )
         )
