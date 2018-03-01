@@ -125,6 +125,7 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
     const errorCount = attributes.errorCount
         ? parseInt(item.Attributes.errorCount.N, 10) : 0;
     const error = errorParser.parse(attributes.messageText ? attributes.messageText.S : 'unknown error');
+    const frontId = attributes.frontId ? attributes.frontId.S : 'unknown';
 
     const isLive = attributes.stageName ? attributes.stageName.S === 'live' : false;
     if (isLive && errorCount >= ERROR_THRESHOLD) {
@@ -145,6 +146,10 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
 
             if (data && data.Item) {
 
+                const affectedFronts = new Set(data.Item.affectedFronts.SS);
+                affectedFronts.add(frontId);
+
+
                 const updateErrorData = {
                     TableName: ERRORS_TABLE_NAME,
                     Key: {
@@ -158,6 +163,12 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                                 N: today.valueOf().toString()
                             },
                             Action: 'PUT'
+                        },
+                        affectedFronts: {
+                            Value: {
+                                SS: Array.fromSet(affectedFronts)
+                            },
+                            Action: 'PUT'
                         }
                     }
                 };
@@ -169,8 +180,14 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                     } else {
                         const lastSeen = new Date(parseInt(data.Item.lastSeen.N));
                         const lastSeenThreshold = new Date().setMinutes(today.getMinutes() - STALE_ERROR_THRESHOLD_MINUTES);
+                        if (lastSeen.valueOf() > lastSeenThreshold) {
+                          logger.info('RECENT ERROR - don\'t alert');
+                        }
+                        if (lastSeen.valueOf() < lastSeenThreshold) {
+                          logger.info('ALERT!!');
+                        }
                         if (lastSeen.valueOf() < lastSeenThreshold && isProd) {
-                            return sendAlert(attributes, errorCount, error, dynamo, post, logger)
+                            return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger)
                             .then(callback)
                             .catch(callback);
                         } else {
@@ -191,6 +208,9 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                       },
                       lastSeen: {
                           N: today.valueOf().toString()
+                      },
+                      affectedFronts: {
+                          SS: [frontId]
                       }
                   }
               };
@@ -201,7 +221,7 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                       callback();
                   } else {
                       if (isProd) {
-                          return sendAlert(attributes, errorCount, error, dynamo, post, logger)
+                          return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger)
                           .then(callback)
                           .catch(callback);
                       } else {
@@ -216,9 +236,8 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
     }
 }
 
-function sendAlert (attributes, errorCount, error, dynamo, post, logger) {
+function sendAlert (attributes, frontId, errorCount, error, dynamo, post, logger) {
 
-  const frontId = attributes.frontId ? attributes.frontId.S : 'unknown';
   logger.log('Notifying pagerduty');
 
   return post({
