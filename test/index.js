@@ -140,7 +140,6 @@ ava.test('dynamo DB error makes the lambda fail', function (test) {
     };
 
     const spy = sinon.spy(dynamo, 'updateItem');
-    spy;
     return invoke(kinesisEvent.withoutError, dynamo, false, today)
     .catch(err => {
         test.true(spy.calledWith(
