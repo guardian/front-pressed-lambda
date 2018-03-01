@@ -142,7 +142,7 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                 callback();
             }
 
-            if (data.Item) {
+            if (data && data.Item) {
 
                 const updateErrorData = {
                     TableName: ERRORS_TABLE_NAME,

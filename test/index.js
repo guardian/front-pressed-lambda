@@ -7,7 +7,7 @@ import errorParser from '../lambda/util/errorParser';
 const date = new Date('2016-03-24').toISOString();
 const dynamoWithGenericPutAndGet = {
     getItem: function (record, callback) {
-        callback(null, {data: null});
+        callback(null, null);
     },
     putItem: function (recod, callback) {
         callback(null, null);
