@@ -272,7 +272,7 @@ ava.test('does not send email on DRAFT even when error count is above threshold'
 });
 
 ava.test('send email when seeing a new error', function (test) {
-    test.plan(5);
+    test.plan(6);
 
     const dynamo = Object.assign(dynamoWithGenericPutAndGet, {
         updateItem: function (record, callback) {
@@ -323,6 +323,13 @@ ava.test('send email when seeing a new error', function (test) {
             )
         )
     ));
+    test.true(dynamoPutSpy.calledWith(
+        sinon.match.has(
+            'Item', sinon.match.has(
+                'affectedFronts', sinon.match.has('SS', sinon.match(['myFront']))
+            )
+        )
+    ));
 });
 
 ava.test('send email when seeing an old error', function (test) {
@@ -336,7 +343,8 @@ ava.test('send email when seeing an old error', function (test) {
             callback(null, {
                 Item: {
                     error: { S: 'error'},
-                    lastSeen: { N: new Date().setMinutes(today.getMinutes() - 120) }
+                    lastSeen: { N: new Date().setMinutes(today.getMinutes() - 120) },
+                    affectedFronts: { SS: [] }
                 }
             });
         }
@@ -391,7 +399,8 @@ ava.test('do not send an email if error has been seen recently', function (test)
             callback(null, {
                 Item: {
                     error: { S: 'error'},
-                    lastSeen: { N: today.valueOf().toString() }
+                    lastSeen: { N: today.valueOf().toString() },
+                    affectedFronts: { SS: []}
                 }
             });
         }
@@ -425,6 +434,42 @@ ava.test('do not send an email if error has been seen recently', function (test)
                 'lastSeen', sinon.match.has(
                     'Value', sinon.match.has('N', today.valueOf().toString())
                   )
+            )
+        )
+    ));
+});
+
+ava.test('Record frontId when error reoccurs', function (test) {
+    test.plan(1);
+
+    const dynamo = {
+        updateItem: dynamoUpdateForErrors,
+
+        getItem: function (record, callback) {
+            callback(null, {
+                Item: {
+                    error: { S: 'error'},
+                    lastSeen: { N: today.valueOf().toString() },
+                    affectedFronts: { SS: ['testFront']}
+                }
+            });
+        }
+    };
+
+    const post = function () {
+        return Promise.resolve();
+    };
+
+    const dynamoUpdateSpy = sinon.spy(dynamo, 'updateItem');
+
+    invoke(kinesisEvent.withoutError, dynamo, post, true, today);
+
+    test.true(dynamoUpdateSpy.calledWith(
+        sinon.match.has(
+            'AttributeUpdates', sinon.match.has(
+                'affectedFronts', sinon.match.has('Value',
+                    sinon.match.has('SS', sinon.match(['testFront', 'myFront']))
+                )
             )
         )
     ));

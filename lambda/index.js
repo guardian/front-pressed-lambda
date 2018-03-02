@@ -166,7 +166,7 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                         },
                         affectedFronts: {
                             Value: {
-                                SS: Array.fromSet(affectedFronts)
+                                SS: Array.from(affectedFronts)
                             },
                             Action: 'PUT'
                         }
@@ -180,12 +180,6 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                     } else {
                         const lastSeen = new Date(parseInt(data.Item.lastSeen.N));
                         const lastSeenThreshold = new Date().setMinutes(today.getMinutes() - STALE_ERROR_THRESHOLD_MINUTES);
-                        if (lastSeen.valueOf() > lastSeenThreshold) {
-                          logger.info('RECENT ERROR - don\'t alert');
-                        }
-                        if (lastSeen.valueOf() < lastSeenThreshold) {
-                          logger.info('ALERT!!');
-                        }
                         if (lastSeen.valueOf() < lastSeenThreshold && isProd) {
                             return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger)
                             .then(callback)
