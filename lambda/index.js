@@ -146,9 +146,18 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
 
             if (data && data.Item) {
 
-                const affectedFronts = new Set(data.Item.affectedFronts.SS);
-                affectedFronts.add(frontId);
+                const lastSeen = new Date(parseInt(data.Item.lastSeen.N));
+                const lastSeenThreshold = new Date().setMinutes(today.getMinutes() - STALE_ERROR_THRESHOLD_MINUTES);
+                const errorIsStale = lastSeen.valueOf() < lastSeenThreshold;
 
+                let affectedFronts = new Set(data.Item.affectedFronts.SS);
+
+                if (errorIsStale) {
+                    affectedFronts = [frontId];
+                } else {
+                    const frontSet = new Set(data.Item.affectedFronts.SS);
+                    affectedFronts = Array.from(frontSet.add(frontId));
+                }
 
                 const updateErrorData = getErrorUpdateData (error, affectedFronts, today);
 
@@ -157,9 +166,8 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                         logger.error('Error while fetching error item with message ', err);
                         callback();
                     } else {
-                        const lastSeen = new Date(parseInt(data.Item.lastSeen.N));
-                        const lastSeenThreshold = new Date().setMinutes(today.getMinutes() - STALE_ERROR_THRESHOLD_MINUTES);
-                        if (lastSeen.valueOf() < lastSeenThreshold && isProd) {
+
+                        if (errorIsStale && isProd) {
                             return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger)
                             .then(callback)
                             .catch(callback);
@@ -210,7 +218,7 @@ function getErrorUpdateData (error, affectedFronts, today) {
             },
             affectedFronts: {
                 Value: {
-                    SS: Array.from(affectedFronts)
+                    SS: affectedFronts
                 },
                 Action: 'PUT'
             }

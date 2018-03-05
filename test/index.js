@@ -475,3 +475,39 @@ ava.test('Record frontId when error reoccurs', function (test) {
     ));
 });
 
+ava.test.only('Discard old affected fronts if error is stale', function (test) {
+    test.plan(1);
+
+    const dynamo = {
+        updateItem: dynamoUpdateForErrors,
+
+        getItem: function (record, callback) {
+            callback(null, {
+                Item: {
+                    error: { S: 'error'},
+                    lastSeen: { N: new Date().setMinutes(today.getMinutes() - 60).toString() },
+                    affectedFronts: { SS: ['testFront']}
+                }
+            });
+        }
+    };
+
+    const post = function () {
+        return Promise.resolve();
+    };
+
+    const dynamoUpdateSpy = sinon.spy(dynamo, 'updateItem');
+
+    invoke(kinesisEvent.withoutError, dynamo, post, true, today);
+
+    test.true(dynamoUpdateSpy.calledWith(
+        sinon.match.has(
+            'AttributeUpdates', sinon.match.has(
+                'affectedFronts', sinon.match.has('Value',
+                    sinon.match.has('SS', sinon.match(['myFront']))
+                )
+            )
+        )
+    ));
+});
+
