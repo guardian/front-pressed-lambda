@@ -150,28 +150,7 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                 affectedFronts.add(frontId);
 
 
-                const updateErrorData = {
-                    TableName: ERRORS_TABLE_NAME,
-                    Key: {
-                        error: {
-                            S: error
-                        }
-                    },
-                    AttributeUpdates: {
-                        lastSeen: {
-                            Value: {
-                                N: today.valueOf().toString()
-                            },
-                            Action: 'PUT'
-                        },
-                        affectedFronts: {
-                            Value: {
-                                SS: Array.from(affectedFronts)
-                            },
-                            Action: 'PUT'
-                        }
-                    }
-                };
+                const updateErrorData = getErrorUpdateData (error, affectedFronts, today);
 
                 dynamo.updateItem(updateErrorData, (err) => {
                     if (err) {
@@ -191,23 +170,7 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                 });
           } else {
 
-              const newErrorData = {
-                  TableName: ERRORS_TABLE_NAME,
-                  Item: {
-                      error: {
-                          S: error
-                      },
-                      ttl: {
-                          N: new Date().setHours(today.getHours() + TIME_TO_LIVE_HOURS).valueOf().toString()
-                      },
-                      lastSeen: {
-                          N: today.valueOf().toString()
-                      },
-                      affectedFronts: {
-                          SS: [frontId]
-                      }
-                  }
-              };
+              const newErrorData = getErrorCreateData (error, today, frontId);
 
               dynamo.putItem(newErrorData, (err) => {
                   if (err) {
@@ -228,6 +191,51 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
     } else {
       callback();
     }
+}
+
+function getErrorUpdateData (error, affectedFronts, today) {
+    return {
+        TableName: ERRORS_TABLE_NAME,
+        Key: {
+            error: {
+                S: error
+            }
+        },
+        AttributeUpdates: {
+            lastSeen: {
+                Value: {
+                    N: today.valueOf().toString()
+                },
+                Action: 'PUT'
+            },
+            affectedFronts: {
+                Value: {
+                    SS: Array.from(affectedFronts)
+                },
+                Action: 'PUT'
+            }
+        }
+    };
+}
+
+function getErrorCreateData (error, today, frontId) {
+    return {
+        TableName: ERRORS_TABLE_NAME,
+        Item: {
+            error: {
+                S: error
+            },
+            ttl: {
+                N: new Date().setHours(today.getHours() + TIME_TO_LIVE_HOURS).valueOf().toString()
+            },
+            lastSeen: {
+                N: today.valueOf().toString()
+            },
+            affectedFronts: {
+                SS: [frontId]
+            }
+        }
+    };
 }
 
 function sendAlert (attributes, frontId, errorCount, error, dynamo, post, logger) {
