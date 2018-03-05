@@ -17,6 +17,7 @@ const TABLE_NAME = config.dynamo[STAGE].tableName;
 const ERRORS_TABLE_NAME = config.dynamo[STAGE].errorsTableName;
 const STALE_ERROR_THRESHOLD_MINUTES = 30;
 const TIME_TO_LIVE_HOURS = 24;
+const MAX_INCIDENT_LENGTH = 250;
 
 export function handler (event, context, callback) {
     const today = new Date();
@@ -258,7 +259,7 @@ function sendAlert (attributes, frontId, errorCount, error, dynamo, post, logger
           // eslint-disable-next-line camelcase
           event_type: 'trigger',
           // eslint-disable-next-line camelcase
-          incident_key: frontId,
+          incident_key: error.substring(0, MAX_INCIDENT_LENGTH),
           description: `Front ${frontId} failed pressing`,
           details: {
               front: frontId,

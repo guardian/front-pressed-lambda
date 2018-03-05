@@ -475,7 +475,7 @@ ava.test('Record frontId when error reoccurs', function (test) {
     ));
 });
 
-ava.test.only('Discard old affected fronts if error is stale', function (test) {
+ava.test('Discard old affected fronts if error is stale', function (test) {
     test.plan(1);
 
     const dynamo = {
