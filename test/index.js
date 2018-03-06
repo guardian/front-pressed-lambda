@@ -212,7 +212,7 @@ ava.test('send email when error count is above threshold on PROD and live', func
 
 });
 
-ava.test.skip('does not send email on CODE even when error count is above threshold', function (test) {
+ava.test('does not send email on CODE even when error count is above threshold', function (test) {
     test.plan(2);
 
     const dynamo = Object.assign(dynamoWithGenericPutAndGet, {
