@@ -122,6 +122,7 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, lo
 }
 
 function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, callback}) {
+    isProd = true;
     const attributes = item ? item.Attributes : {};
     const errorCount = attributes.errorCount
         ? parseInt(item.Attributes.errorCount.N, 10) : 0;
@@ -161,7 +162,6 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                 }
 
                 const updateErrorData = getErrorUpdateData (error, affectedFronts, today);
-
                 dynamo.updateItem(updateErrorData, (err) => {
                     if (err) {
                         logger.error('Error while fetching error item with message ', err);
