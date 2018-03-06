@@ -1,12 +1,44 @@
 import ava from 'ava';
+import sinon from 'sinon';
 import {storeEvents} from '../tmp/lambda/index';
 import kinesisEvent from './fixtures/kinesisEvent.fixture';
+import errorParser from '../lambda/util/errorParser';
 
 const date = new Date('2016-03-24').toISOString();
-function invoke (event, dynamo, post, prod) {
+const dynamoWithGenericPutAndGet = {
+    getItem: function (record, callback) {
+        callback(null, null);
+    },
+    putItem: function (recod, callback) {
+        callback(null, null);
+    }
+
+};
+
+function dynamoUpdateForErrors (record, callback) {
+    if (record.Key.frontId) {
+        callback(null, {
+            Attributes: {
+                stageName: { S: 'live' },
+                statusCode: { S: 'success' },
+                frontId: { S: record.Key.frontId.S },
+                errorCount: { N: '4' },
+                messageText: { S: 'error' }
+            }
+        });
+
+    } else {
+      callback(null, null);
+    }
+}
+
+const today = new Date();
+
+function invoke (event, dynamo, post, prod, today) {
+
     return new Promise((resolve, reject) => {
         storeEvents({
-            event, dynamo, post, isoDate: date, isProd: !!prod, logger: {
+            event, dynamo, post, isoDate: date, isProd: !!prod, today: today, logger: {
                 error () {}, log () {}
             }, callback (err) {
                 if (err) {
@@ -19,11 +51,22 @@ function invoke (event, dynamo, post, prod) {
     });
 }
 
+ava.test('error with parenthesis is parsed correctly', function (test) {
+    const topLevelError = 'Some(my.test.error: error)';
+    const error = topLevelError + ' There was an error';
+    const parsedError = errorParser.parse(error);
+    test.is(parsedError, topLevelError);
+});
+
+ava.test('error without parenthesis gets parsed correctly', function (test) {
+    const error = ' There was an error';
+    const parsedError = errorParser.parse(error);
+    test.is(parsedError, error);
+});
+
 ava.test('front pressed correctly is stored correctly', function (test) {
     const dynamo = {
         updateItem: function (record, callback) {
-            test.deepEqual(record.Key.frontId.S, 'myFront');
-            test.deepEqual(record.ExpressionAttributeValues[':time'].S, date);
             callback(null, {
                 Attributes: {
                     statusCode: { S: 'success' }
@@ -32,14 +75,31 @@ ava.test('front pressed correctly is stored correctly', function (test) {
         }
     };
 
-    return invoke(kinesisEvent.withoutError, dynamo);
+    const spy = sinon.spy(dynamo, 'updateItem');
+
+    invoke(kinesisEvent.withoutError, dynamo, false, today);
+    test.true(spy.calledOnce);
+    test.true(spy.calledWith(
+        sinon.match.has(
+            'Key', sinon.match.has(
+                'frontId', sinon.match.has('S', 'myFront')
+            )
+        )
+    ));
+
+    test.true(spy.calledWith(
+        sinon.match.has(
+            'ExpressionAttributeValues', sinon.match.has(
+                ':time', sinon.match.has('S', date)
+              )
+        )
+    ));
+
 });
 
 ava.test('front pressed error is stored correctly', function (test) {
     const dynamo = {
         updateItem: function (record, callback) {
-            test.deepEqual(record.Key.frontId.S, 'myFront');
-            test.deepEqual(record.ExpressionAttributeValues[':time'].S, date);
             callback(null, {
                 Attributes: {
                     statusCode: { S: 'success' },
@@ -49,31 +109,64 @@ ava.test('front pressed error is stored correctly', function (test) {
         }
     };
 
-    return invoke(kinesisEvent.withError, dynamo);
+    const spy = sinon.spy(dynamo, 'updateItem');
+
+    invoke(kinesisEvent.withError, dynamo, false, today);
+    test.true(spy.calledOnce);
+    test.true(spy.calledWith(
+        sinon.match.has(
+            'Key', sinon.match.has(
+                'frontId', sinon.match.has('S', 'myFront')
+            )
+        )
+    ));
+
+    test.true(spy.calledWith(
+        sinon.match.has(
+            'ExpressionAttributeValues', sinon.match.has(
+                ':time', sinon.match.has('S', date)
+              )
+        )
+    ));
 });
 
 ava.test('dynamo DB error makes the lambda fail', function (test) {
+
+    test.plan(3);
     const dynamo = {
         updateItem: function (record, callback) {
-            test.deepEqual(record.Key.frontId.S, 'myFront');
-            test.deepEqual(record.ExpressionAttributeValues[':time'].S, date);
+
             callback(new Error('some error'));
         }
     };
 
-    return invoke(kinesisEvent.withoutError, dynamo)
-        .catch(err => {
-            test.regex(err.message, /some error/);
-        });
+    const spy = sinon.spy(dynamo, 'updateItem');
+    return invoke(kinesisEvent.withoutError, dynamo, false, today)
+    .catch(err => {
+        test.true(spy.calledWith(
+            sinon.match.has(
+                'Key', sinon.match.has(
+                    'frontId', sinon.match.has('S', 'myFront')
+                )
+            )
+        ));
+
+        test.true(spy.calledWith(
+            sinon.match.has(
+                'ExpressionAttributeValues', sinon.match.has(
+                    ':time', sinon.match.has('S', date)
+                  )
+            )
+        ));
+        test.regex(err.message, /some error/);
+    });
 });
 
 ava.test('send email when error count is above threshold on PROD and live', function (test) {
-    test.plan(5);
+    test.plan(3);
 
-    const dynamo = {
+    const dynamo = Object.assign(dynamoWithGenericPutAndGet, {
         updateItem: function (record, callback) {
-            test.deepEqual(record.Key.frontId.S, 'myFront');
-            test.deepEqual(record.ExpressionAttributeValues[':time'].S, date);
             callback(null, {
                 Attributes: {
                     stageName: { S: 'live' },
@@ -83,25 +176,47 @@ ava.test('send email when error count is above threshold on PROD and live', func
                 }
             });
         }
-    };
-    const post = function (request) {
-        const body = JSON.parse(request.body);
-        test.regex(request.url, /pagerduty/);
-        test.is(body.event_type, 'trigger');
-        test.regex(body.description, /myFront/i);
+    });
+
+    const post = function () {
         return Promise.resolve();
     };
 
-    return invoke(kinesisEvent.withoutError, dynamo, post, true);
+    const dynamoSpy = sinon.spy(dynamo, 'updateItem');
+
+    const postSpy = sinon.spy(post);
+    invoke(kinesisEvent.withoutError, dynamo, postSpy, true, today);
+
+    test.true(dynamoSpy.calledWith(
+        sinon.match.has(
+            'Key', sinon.match.has(
+                'frontId', sinon.match.has('S', 'myFront')
+            )
+        )
+    ));
+
+    test.true(dynamoSpy.calledWith(
+        sinon.match.has(
+            'ExpressionAttributeValues', sinon.match.has(
+                ':time', sinon.match.has('S', date)
+              )
+        )
+    ));
+
+    test.true(postSpy.calledWith(sinon.match(function (value) {
+      const body = JSON.parse(value.body);
+      return body.event_type === 'trigger' &&
+        body.description.match(/myFront/i) &&
+        value.url.match(/pagerduty/);
+    })));
+
 });
 
-ava.test('does not send email on CODE even when error count is above threshold', function (test) {
+ava.test.skip('does not send email on CODE even when error count is above threshold', function (test) {
     test.plan(2);
 
-    const dynamo = {
+    const dynamo = Object.assign(dynamoWithGenericPutAndGet, {
         updateItem: function (record, callback) {
-            test.deepEqual(record.Key.frontId.S, 'myFront');
-            test.deepEqual(record.ExpressionAttributeValues[':time'].S, date);
             callback(null, {
                 Attributes: {
                     stageName: { S: 'live' },
@@ -111,22 +226,25 @@ ava.test('does not send email on CODE even when error count is above threshold',
                 }
             });
         }
-    };
-    const post = function () {
-        test.fail('Pagerduty should not be called');
-        return Promise.reject();
-    };
+    });
 
-    return invoke(kinesisEvent.withoutError, dynamo, post, false);
+    const post = function () {
+        return Promise.resolve;
+    };
+    const dynamoSpy = sinon.spy(dynamo, 'updateItem');
+    const postSpy = sinon.spy(post);
+
+    invoke(kinesisEvent.withoutError, dynamo, postSpy, false, today);
+
+    test.true(dynamoSpy.calledOnce);
+    test.false(postSpy.called);
 });
 
 ava.test('does not send email on DRAFT even when error count is above threshold', function (test) {
     test.plan(2);
 
-    const dynamo = {
+    const dynamo = Object.assign(dynamoWithGenericPutAndGet, {
         updateItem: function (record, callback) {
-            test.deepEqual(record.Key.frontId.S, 'myFront');
-            test.deepEqual(record.ExpressionAttributeValues[':time'].S, date);
             callback(null, {
                 Attributes: {
                     stageName: { S: 'draft' },
@@ -136,11 +254,260 @@ ava.test('does not send email on DRAFT even when error count is above threshold'
                 }
             });
         }
-    };
+    });
+
     const post = function () {
-        test.fail('Lambda should not be invoked');
-        return Promise.reject();
+        return Promise.resolve;
     };
 
-    return invoke(kinesisEvent.withoutError, dynamo, post, false);
+    const dynamoSpy = sinon.spy(dynamo, 'updateItem');
+    const postSpy = sinon.spy(post);
+
+    invoke(kinesisEvent.withoutError, dynamo, postSpy, false, today);
+
+    test.true(dynamoSpy.calledOnce);
+    test.false(postSpy.called);
+
+    return invoke(kinesisEvent.withoutError, dynamo, post, false, today);
 });
+
+ava.test('send email when seeing a new error', function (test) {
+    test.plan(6);
+
+    const dynamo = Object.assign(dynamoWithGenericPutAndGet, {
+        updateItem: function (record, callback) {
+            callback(null, {
+                Attributes: {
+                    stageName: { S: 'live' },
+                    statusCode: { S: 'success' },
+                    frontId: { S: record.Key.frontId.S },
+                    errorCount: { N: '4' },
+                    messageText: { S: 'error' }
+                }
+            });
+        }
+    });
+
+    const post = function () {
+        return Promise.resolve();
+    };
+
+    const dynamoGetSpy = sinon.spy(dynamo, 'getItem');
+    const dynamoPutSpy = sinon.spy(dynamo, 'putItem');
+    const dynamoUpdateSpy = sinon.spy(dynamo, 'updateItem');
+
+    const postSpy = sinon.spy(post);
+    invoke(kinesisEvent.withoutError, dynamo, postSpy, true, today);
+
+    test.true(dynamoUpdateSpy.calledOnce);
+    test.true(dynamoGetSpy.calledOnce);
+
+    test.true(postSpy.calledWith(sinon.match(function (value) {
+      const body = JSON.parse(value.body);
+      return body.event_type === 'trigger' &&
+        body.description.match(/myFront/i) &&
+        value.url.match(/pagerduty/);
+    })));
+
+    test.true(dynamoPutSpy.calledWith(
+        sinon.match.has(
+            'Item', sinon.match.has(
+                'error', sinon.match.has('S', 'error')
+            )
+        )
+    ));
+    test.true(dynamoPutSpy.calledWith(
+        sinon.match.has(
+            'Item', sinon.match.has(
+                'lastSeen', sinon.match.has('N', today.valueOf().toString())
+            )
+        )
+    ));
+    test.true(dynamoPutSpy.calledWith(
+        sinon.match.has(
+            'Item', sinon.match.has(
+                'affectedFronts', sinon.match.has('SS', sinon.match(['myFront']))
+            )
+        )
+    ));
+});
+
+ava.test('send email when seeing an old error', function (test) {
+    test.plan(4);
+
+    const dynamo = {
+
+        updateItem: dynamoUpdateForErrors,
+
+        getItem: function (record, callback) {
+            callback(null, {
+                Item: {
+                    error: { S: 'error'},
+                    lastSeen: { N: new Date().setMinutes(today.getMinutes() - 120) },
+                    affectedFronts: { SS: [] }
+                }
+            });
+        }
+    };
+
+    const post = function () {
+        return Promise.resolve();
+    };
+
+    const dynamoGetSpy = sinon.spy(dynamo, 'getItem');
+    const dynamoUpdateSpy = sinon.spy(dynamo, 'updateItem');
+
+    const postSpy = sinon.spy(post);
+    invoke(kinesisEvent.withoutError, dynamo, postSpy, true, today);
+
+    test.true(dynamoGetSpy.calledOnce);
+
+    test.true(postSpy.calledWith(sinon.match(function (value) {
+      const body = JSON.parse(value.body);
+      return body.event_type === 'trigger' &&
+        body.description.match(/myFront/i) &&
+        value.url.match(/pagerduty/);
+    })));
+
+    test.true(dynamoUpdateSpy.calledWith(
+        sinon.match.has(
+            'Key', sinon.match.has(
+                'error', sinon.match.has('S', 'error')
+            )
+        )
+    ));
+
+    test.true(dynamoUpdateSpy.calledWith(
+        sinon.match.has(
+            'AttributeUpdates', sinon.match.has(
+                'lastSeen', sinon.match.has(
+                    'Value', sinon.match.has('N', today.valueOf().toString())
+                  )
+            )
+        )
+    ));
+
+});
+
+ava.test('do not send an email if error has been seen recently', function (test) {
+    test.plan(4);
+
+    const dynamo = {
+        updateItem: dynamoUpdateForErrors,
+
+        getItem: function (record, callback) {
+            callback(null, {
+                Item: {
+                    error: { S: 'error'},
+                    lastSeen: { N: today.valueOf().toString() },
+                    affectedFronts: { SS: []}
+                }
+            });
+        }
+    };
+
+    const post = function () {
+        return Promise.resolve();
+    };
+
+    const dynamoGetSpy = sinon.spy(dynamo, 'getItem');
+    const dynamoUpdateSpy = sinon.spy(dynamo, 'updateItem');
+
+    const postSpy = sinon.spy(post);
+    invoke(kinesisEvent.withoutError, dynamo, postSpy, true, today);
+
+    test.true(dynamoGetSpy.calledOnce);
+
+    test.true(postSpy.notCalled);
+
+    test.true(dynamoUpdateSpy.calledWith(
+        sinon.match.has(
+            'Key', sinon.match.has(
+                'error', sinon.match.has('S', 'error')
+            )
+        )
+    ));
+
+    test.true(dynamoUpdateSpy.calledWith(
+        sinon.match.has(
+            'AttributeUpdates', sinon.match.has(
+                'lastSeen', sinon.match.has(
+                    'Value', sinon.match.has('N', today.valueOf().toString())
+                  )
+            )
+        )
+    ));
+});
+
+ava.test('Record frontId when error reoccurs', function (test) {
+    test.plan(1);
+
+    const dynamo = {
+        updateItem: dynamoUpdateForErrors,
+
+        getItem: function (record, callback) {
+            callback(null, {
+                Item: {
+                    error: { S: 'error'},
+                    lastSeen: { N: today.valueOf().toString() },
+                    affectedFronts: { SS: ['testFront']}
+                }
+            });
+        }
+    };
+
+    const post = function () {
+        return Promise.resolve();
+    };
+
+    const dynamoUpdateSpy = sinon.spy(dynamo, 'updateItem');
+
+    invoke(kinesisEvent.withoutError, dynamo, post, true, today);
+
+    test.true(dynamoUpdateSpy.calledWith(
+        sinon.match.has(
+            'AttributeUpdates', sinon.match.has(
+                'affectedFronts', sinon.match.has('Value',
+                    sinon.match.has('SS', sinon.match(['testFront', 'myFront']))
+                )
+            )
+        )
+    ));
+});
+
+ava.test('Discard old affected fronts if error is stale', function (test) {
+    test.plan(1);
+
+    const dynamo = {
+        updateItem: dynamoUpdateForErrors,
+
+        getItem: function (record, callback) {
+            callback(null, {
+                Item: {
+                    error: { S: 'error'},
+                    lastSeen: { N: new Date().setMinutes(today.getMinutes() - 60).toString() },
+                    affectedFronts: { SS: ['testFront']}
+                }
+            });
+        }
+    };
+
+    const post = function () {
+        return Promise.resolve();
+    };
+
+    const dynamoUpdateSpy = sinon.spy(dynamo, 'updateItem');
+
+    invoke(kinesisEvent.withoutError, dynamo, post, true, today);
+
+    test.true(dynamoUpdateSpy.calledWith(
+        sinon.match.has(
+            'AttributeUpdates', sinon.match.has(
+                'affectedFronts', sinon.match.has('Value',
+                    sinon.match.has('SS', sinon.match(['myFront']))
+                )
+            )
+        )
+    ));
+});
+

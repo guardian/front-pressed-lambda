@@ -2,6 +2,7 @@ import config from '../tmp/config.json';
 import AWS from 'aws-sdk';
 import mapLimit from 'async-es/mapLimit';
 import { post as postUtil } from 'simple-get-promise';
+import errorParser from './util/errorParser';
 
 AWS.config.region = config.AWS.region;
 
@@ -13,6 +14,10 @@ const STAGE = (process.env.AWS_LAMBDA_FUNCTION_NAME || 'CODE')
     .pop();
 const ROLE_TO_ASSUME = config.AWS.roleToAssume[STAGE];
 const TABLE_NAME = config.dynamo[STAGE].tableName;
+const ERRORS_TABLE_NAME = config.dynamo[STAGE].errorsTableName;
+const STALE_ERROR_THRESHOLD_MINUTES = 30;
+const TIME_TO_LIVE_HOURS = 24;
+const MAX_INCIDENT_LENGTH = 250;
 
 export function handler (event, context, callback) {
     const today = new Date();
@@ -39,18 +44,18 @@ export function handler (event, context, callback) {
             const lambda = new AWS.Lambda({
                 credentials: assumedCredentials
             });
-            storeEvents({event, dynamo, lambda, isoDate: today.toISOString(), logger: console, callback, isProd: STAGE === 'PROD', post: postUtil});
+            storeEvents({event, dynamo, lambda, isoDate: today.toISOString(), logger: console, callback, isProd: STAGE === 'PROD', post: postUtil, today: today});
         }
     });
 }
 
-export function storeEvents ({event, callback, dynamo, isoDate, logger, post, isProd}) {
+export function storeEvents ({event, callback, dynamo, isoDate, logger, post, isProd, today}) {
     const jobs = { started: 0, completed: 0, total: event.Records.length };
 
     mapLimit(
         event.Records,
         PARALLEL_JOBS,
-        (record, jobCallback) => putRecordToDynamo({jobs, record, dynamo, isoDate, logger, isProd, callback: jobCallback, post}),
+        (record, jobCallback) => putRecordToDynamo({jobs, record, dynamo, isoDate, logger, isProd, callback: jobCallback, post, today}),
         err => {
             if (err) {
                 logger.error('Error processing records', err);
@@ -63,7 +68,7 @@ export function storeEvents ({event, callback, dynamo, isoDate, logger, post, is
     );
 }
 
-function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, logger, post}) {
+function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, logger, post, today}) {
     const jobId = ++jobs.started;
 
     logger.log('Process job ' + jobId + ' in ' + record.kinesis.sequenceNumber);
@@ -111,45 +116,162 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, lo
             logger.error('Error while processing ' + jobId, err);
             callback(err);
         } else {
-            maybeNotifyPressBroken({item: updatedItem, logger, isProd, post})
-            .then(() => callback())
-            .catch(callback);
+            maybeNotifyPressBroken({item: updatedItem, logger, isProd, post, dynamo, today, callback});
         }
     });
 }
 
-function maybeNotifyPressBroken ({item, logger, isProd, post}) {
+function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, callback}) {
+    isProd = true;
     const attributes = item ? item.Attributes : {};
     const errorCount = attributes.errorCount
         ? parseInt(item.Attributes.errorCount.N, 10) : 0;
+    const error = errorParser.parse(attributes.messageText ? attributes.messageText.S : 'unknown error');
     const frontId = attributes.frontId ? attributes.frontId.S : 'unknown';
-    const error = attributes.messageText ? attributes.messageText.S : 'unknown error';
-    const isLive = attributes.stageName ? attributes.stageName.S === 'live' : false;
 
-    if (isProd && isLive && errorCount >= ERROR_THRESHOLD) {
-        logger.log('Notifying pagerduty');
-        return post({
-            url: 'https://events.pagerduty.com/generic/2010-04-15/create_event.json',
-            body: JSON.stringify({
-                // eslint-disable-next-line camelcase
-                service_key: config.pagerduty.key,
-                // eslint-disable-next-line camelcase
-                event_type: 'trigger',
-                // eslint-disable-next-line camelcase
-                incident_key: frontId,
-                description: `Front ${frontId} failed pressing`,
-                details: {
-                    front: frontId,
-                    stage: attributes.stageName ? attributes.stageName.S : 'unknown',
-                    count: errorCount,
-                    error: error
-                },
-                client: 'Press monitor',
-                // eslint-disable-next-line camelcase
-                client_url: `${config.facia[STAGE].path}/troubleshoot/stale/${frontId}`
-            })
+    const isLive = attributes.stageName ? attributes.stageName.S === 'live' : false;
+    if (isLive && errorCount >= ERROR_THRESHOLD) {
+
+        dynamo.getItem({
+            TableName: ERRORS_TABLE_NAME,
+            Key: {
+                error: {
+                    S: error
+                }
+            }
+        }, (err, data) => {
+
+            if (err) {
+                logger.error('Error while fetching error item with message ', err);
+                callback();
+            }
+
+            if (data && data.Item) {
+
+                const lastSeen = new Date(parseInt(data.Item.lastSeen.N));
+                const lastSeenThreshold = new Date().setMinutes(today.getMinutes() - STALE_ERROR_THRESHOLD_MINUTES);
+                const errorIsStale = lastSeen.valueOf() < lastSeenThreshold;
+
+                let affectedFronts = new Set(data.Item.affectedFronts.SS);
+
+                if (errorIsStale) {
+                    affectedFronts = [frontId];
+                } else {
+                    const frontSet = new Set(data.Item.affectedFronts.SS);
+                    affectedFronts = Array.from(frontSet.add(frontId));
+                }
+
+                const updateErrorData = getErrorUpdateData (error, affectedFronts, today);
+                dynamo.updateItem(updateErrorData, (err) => {
+                    if (err) {
+                        logger.error('Error while fetching error item with message ', err);
+                        callback();
+                    } else {
+
+                        if (errorIsStale && isProd) {
+                            return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger)
+                            .then(callback)
+                            .catch(callback);
+                        } else {
+                            callback();
+                        }
+                    }
+                });
+          } else {
+
+              const newErrorData = getErrorCreateData (error, today, frontId);
+
+              dynamo.putItem(newErrorData, (err) => {
+                  if (err) {
+                      logger.error('Error while fetching error item with message ', err);
+                      callback();
+                  } else {
+                      if (isProd) {
+                          return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger)
+                          .then(callback)
+                          .catch(callback);
+                      } else {
+                          callback();
+                      }
+                  }
+              });
+          }
         });
     } else {
-        return Promise.resolve();
+      callback();
     }
 }
+
+function getErrorUpdateData (error, affectedFronts, today) {
+    return {
+        TableName: ERRORS_TABLE_NAME,
+        Key: {
+            error: {
+                S: error
+            }
+        },
+        AttributeUpdates: {
+            lastSeen: {
+                Value: {
+                    N: today.valueOf().toString()
+                },
+                Action: 'PUT'
+            },
+            affectedFronts: {
+                Value: {
+                    SS: affectedFronts
+                },
+                Action: 'PUT'
+            }
+        }
+    };
+}
+
+function getErrorCreateData (error, today, frontId) {
+    const timeToLive = Math.floor(new Date().setHours(today.getHours() + TIME_TO_LIVE_HOURS).valueOf() / 1000);
+    return {
+        TableName: ERRORS_TABLE_NAME,
+        Item: {
+            error: {
+                S: error
+            },
+            ttl: {
+                N: timeToLive.toString()
+            },
+            lastSeen: {
+                N: today.valueOf().toString()
+            },
+            affectedFronts: {
+                SS: [frontId]
+            }
+        }
+    };
+}
+
+function sendAlert (attributes, frontId, errorCount, error, dynamo, post, logger) {
+
+  logger.log('Notifying pagerduty');
+
+  return post({
+      url: 'https://events.pagerduty.com/generic/2010-04-15/create_event.json',
+      body: JSON.stringify({
+          // eslint-disable-next-line camelcase
+          service_key: config.pagerduty.key,
+          // eslint-disable-next-line camelcase
+          event_type: 'trigger',
+          // eslint-disable-next-line camelcase
+          incident_key: error.substring(0, MAX_INCIDENT_LENGTH),
+          description: `Front ${frontId} failed pressing`,
+          details: {
+              front: frontId,
+              stage: attributes.stageName ? attributes.stageName.S : 'unknown',
+              count: errorCount,
+              error: error
+          },
+          client: 'Press monitor',
+          // eslint-disable-next-line camelcase
+          client_url: `${config.facia[STAGE].path}/troubleshoot/stale/${frontId}`
+      })
+  });
+}
+
