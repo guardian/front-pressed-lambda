@@ -122,7 +122,6 @@ function putRecordToDynamo ({jobs, record, dynamo, isoDate, isProd, callback, lo
 }
 
 function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, callback}) {
-    isProd = true;
     const attributes = item ? item.Attributes : {};
     const errorCount = attributes.errorCount
         ? parseInt(item.Attributes.errorCount.N, 10) : 0;
