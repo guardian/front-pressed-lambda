@@ -228,6 +228,7 @@ function getErrorUpdateData (error, affectedFronts, today) {
 }
 
 function getErrorCreateData (error, today, frontId) {
+    const timeToLive = Math.floor(new Date().setHours(today.getHours() + TIME_TO_LIVE_HOURS).valueOf() / 1000);
     return {
         TableName: ERRORS_TABLE_NAME,
         Item: {
@@ -235,7 +236,7 @@ function getErrorCreateData (error, today, frontId) {
                 S: error
             },
             ttl: {
-                N: new Date().setHours(today.getHours() + TIME_TO_LIVE_HOURS).valueOf().toString()
+                N: timeToLive.toString()
             },
             lastSeen: {
                 N: today.valueOf().toString()
