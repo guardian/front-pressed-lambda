@@ -127,6 +127,7 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
         ? parseInt(item.Attributes.errorCount.N, 10) : 0;
     const error = errorParser.parse(attributes.messageText ? attributes.messageText.S : 'unknown error');
     const frontId = attributes.frontId ? attributes.frontId.S : 'unknown';
+    isProd = true;
 
     const isLive = attributes.stageName ? attributes.stageName.S === 'live' : false;
     if (isLive && errorCount >= ERROR_THRESHOLD) {
@@ -170,7 +171,10 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                         if (errorIsStale && isProd) {
                             return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger)
                             .then(callback)
-                            .catch(callback);
+                            .catch((error) => {
+                                logger.error('error when posting to pagerduty ', error);
+                                callback();
+                            });
                         } else {
                             callback();
                         }
@@ -187,8 +191,11 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                   } else {
                       if (isProd) {
                           return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger)
-                          .then(callback)
-                          .catch(callback);
+                            .then(callback)
+                            .catch((error) => {
+                                logger.error('error when posting to pagerduty ', error);
+                                callback();
+                            });
                       } else {
                           callback();
                       }
