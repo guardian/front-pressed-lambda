@@ -166,9 +166,10 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                         logger.error('Error while fetching error item with message ', err);
                         callback();
                     } else {
+                        if (isProd) {
+                            const eventType = errorIsStale ? 'trigger' : 'resolve';
 
-                        if (errorIsStale && isProd) {
-                            return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger)
+                            return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger, eventType, 'error is stale')
                             .then(callback)
                             .catch(callback);
                         } else {
@@ -186,7 +187,7 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                       callback();
                   } else {
                       if (isProd) {
-                          return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger)
+                          return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger, 'trigger', 'unable to get data from Dynamo table')
                           .then(callback)
                           .catch(callback);
                       } else {
@@ -247,7 +248,7 @@ function getErrorCreateData (error, today, frontId) {
     };
 }
 
-function sendAlert (attributes, frontId, errorCount, error, dynamo, post, logger) {
+function sendAlert (attributes, frontId, errorCount, error, dynamo, post, logger, eventType, extraDescription) {
 
   logger.log('Notifying pagerduty');
 
@@ -257,10 +258,10 @@ function sendAlert (attributes, frontId, errorCount, error, dynamo, post, logger
           // eslint-disable-next-line camelcase
           service_key: config.pagerduty.key,
           // eslint-disable-next-line camelcase
-          event_type: 'trigger',
+          event_type: eventType,
           // eslint-disable-next-line camelcase
           incident_key: error.substring(0, MAX_INCIDENT_LENGTH),
-          description: `Front ${frontId} failed pressing`,
+          description: `Front ${frontId} failed pressing: ` + extraDescription,
           details: {
               front: frontId,
               stage: attributes.stageName ? attributes.stageName.S : 'unknown',
