@@ -18,6 +18,8 @@
     "babel-plugin-transform-es2015-shorthand-properties": "^6.8.0",
     "babel-plugin-transform-es2015-spread": "^6.8.0",
     "eslint": "^3.2.2",
+    "eslint-config-prettier": "^6.7.0",
+    "exec-chainable": "0.0.3",
     "gulp": "^3.9.1",
     "gulp-babel": "^6.1.2",
     "gulp-yaml": "^1.0.1",
@@ -27,12 +29,11 @@
     "rollup-plugin-commonjs": "^3.3.1",
     "rollup-plugin-json": "^2.0.1",
     "rollup-plugin-node-resolve": "^2.0.0",
-    "exec-chainable": "0.0.3",
     "sinon": "^4.3.0"
   },
   "scripts": {
     "lint": "eslint lambda/*.js test/*.js",
-    "test": "npm run lint && npm run bundle && ava",
+    "test": "npm run bundle && ava",
     "start": "node lambda/index.js",
     "rollup": "rollup -c",
     "secrets": "./bin/get-secrets.sh $FRONT_PRESSED_LAMBDA_BUCKET > tmp/config.json",
