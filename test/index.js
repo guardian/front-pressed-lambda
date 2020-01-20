@@ -130,37 +130,6 @@ ava.test('front pressed error is stored correctly', function (test) {
     ));
 });
 
-ava.test('dynamo DB error makes the lambda fail', function (test) {
-
-    test.plan(3);
-    const dynamo = {
-        updateItem: function (record, callback) {
-
-            callback(new Error('some error'));
-        }
-    };
-
-    const spy = sinon.spy(dynamo, 'updateItem');
-    return invoke(kinesisEvent.withoutError, dynamo, false, today)
-    .catch(err => {
-        test.true(spy.calledWith(
-            sinon.match.has(
-                'Key', sinon.match.has(
-                    'frontId', sinon.match.has('S', 'myFront')
-                )
-            )
-        ));
-
-        test.true(spy.calledWith(
-            sinon.match.has(
-                'ExpressionAttributeValues', sinon.match.has(
-                    ':time', sinon.match.has('S', date)
-                  )
-            )
-        ));
-        test.regex(err.message, /some error/);
-    });
-});
 
 ava.test('send email when error count is above threshold on PROD and live', function (test) {
     test.plan(3);
@@ -389,7 +358,7 @@ ava.test('send email when seeing an old error', function (test) {
 
 });
 
-ava.test('do not send an email if error has been seen recently', function (test) {
+ava.test('Sends an email if error has been seen recently', function (test) {
     test.plan(4);
 
     const dynamo = {
@@ -418,7 +387,7 @@ ava.test('do not send an email if error has been seen recently', function (test)
 
     test.true(dynamoGetSpy.calledOnce);
 
-    test.true(postSpy.notCalled);
+    test.true(postSpy.called);
 
     test.true(dynamoUpdateSpy.calledWith(
         sinon.match.has(
