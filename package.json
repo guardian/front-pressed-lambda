@@ -36,11 +36,7 @@
     "lint": "eslint lambda/*.js test/*.js",
     "test": "jest",
     "teamcity:deploy": "npx @guardian/node-riffraff-artifact",
-    "start": "node lambda/index.js",
-    "rollup": "rollup -c",
-    "secrets": "./bin/get-secrets.sh $FRONT_PRESSED_LAMBDA_BUCKET > tmp/config.json",
-    "bundle": "mkdir -p tmp && npm run secrets && npm run rollup",
-    "deploy": "gulp deploy && VERBOSE=true ARTEFACT_PATH=$PWD riffraff-artefact"
+    "start": "node lambda/index.js"
   },
   "dependencies": {
     "async": "^3.1.1",
