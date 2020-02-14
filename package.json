@@ -11,9 +11,8 @@
   "devDependencies": {
     "@babel/core": "^7.8.4",
     "@babel/preset-env": "^7.8.4",
-    "ava": "^0.15.2",
+    "@zeit/ncc": "^0.21.1",
     "aws-sdk": "^2.4.13",
-    "aws-sdk-mock": "^5.0.0",
     "babel-eslint": "^10.0.3",
     "babel-jest": "^25.1.0",
     "eslint": "^3.2.2",
@@ -21,21 +20,14 @@
     "eslint-plugin-prettier": "^3.1.2",
     "eslint-scope": "^5.0.0",
     "exec-chainable": "0.0.3",
-    "gulp": "^3.9.1",
-    "gulp-yaml": "^1.0.1",
-    "jest": "^25.1.0",
-    "node-riffraff-artefact": "^2.0.1",
-    "rollup": "^0.34.3",
-    "rollup-plugin-babel": "^4.3.3",
-    "rollup-plugin-commonjs": "^3.3.1",
-    "rollup-plugin-json": "^2.0.1",
-    "rollup-plugin-node-resolve": "^2.0.0",
-    "sinon": "^4.3.0"
+    "jest": "^25.1.0"
   },
   "scripts": {
     "lint": "eslint lambda/*.js test/*.js",
     "test": "jest",
-    "teamcity:deploy": "npx @guardian/node-riffraff-artifact",
+    "get-secrets": "./bin/get-secrets.sh $FRONT_PRESSED_LAMBDA_BUCKET > tmp/config.json",
+    "bundle": "npm run get-secrets && ncc build lambda/index.js -o dist -e aws-sdk -s",
+    "teamcity:deploy": "npm run bundle && npx @guardian/node-riffraff-artifact",
     "start": "node lambda/index.js"
   },
   "dependencies": {

@@ -4,7 +4,7 @@
   "actions": [
     {
       "action": "front-pressed-lambda",
-      "path": "./",
+      "path": "dist",
       "compress": "zip"
     }
   ]
