@@ -134,27 +134,15 @@ function putRecordToDynamo({
     {
       TableName: TABLE_NAME,
       Key: {
-        stageName: {
-          S: data.isLive ? "live" : "draft"
-        },
-        frontId: {
-          S: data.front
-        }
+        stageName: { S: data.isLive ? "live" : "draft" },
+        frontId: { S: data.front }
       },
       UpdateExpression: updateExpression,
       ExpressionAttributeValues: {
-        ":count": {
-          N: data.status === "ok" ? "0" : "1"
-        },
-        ":time": {
-          S: isoDate
-        },
-        ":status": {
-          S: data.status
-        },
-        ":message": {
-          S: data.message || data.status
-        }
+        ":count": { N: data.status === "ok" ? "0" : "1" },
+        ":time": { S: isoDate },
+        ":status": { S: data.status },
+        ":message": { S: data.message || data.status }
       },
       ReturnValues: "ALL_NEW"
     },
@@ -202,11 +190,7 @@ function maybeNotifyPressBroken({
     dynamo.getItem(
       {
         TableName: ERRORS_TABLE_NAME,
-        Key: {
-          error: {
-            S: error
-          }
-        }
+        Key: { error: { S: error } }
       },
       (err, data) => {
         if (err) {
@@ -299,22 +283,14 @@ function maybeNotifyPressBroken({
 function getErrorUpdateData(error, affectedFronts, today) {
   return {
     TableName: ERRORS_TABLE_NAME,
-    Key: {
-      error: {
-        S: error
-      }
-    },
+    Key: { error: { S: error } },
     AttributeUpdates: {
       lastSeen: {
-        Value: {
-          N: today.valueOf().toString()
-        },
+        Value: { N: today.valueOf().toString() },
         Action: "PUT"
       },
       affectedFronts: {
-        Value: {
-          SS: affectedFronts
-        },
+        Value: { SS: affectedFronts },
         Action: "PUT"
       }
     }
@@ -328,18 +304,10 @@ function getErrorCreateData(error, today, frontId) {
   return {
     TableName: ERRORS_TABLE_NAME,
     Item: {
-      error: {
-        S: error
-      },
-      ttl: {
-        N: timeToLive.toString()
-      },
-      lastSeen: {
-        N: today.valueOf().toString()
-      },
-      affectedFronts: {
-        SS: [frontId]
-      }
+      error: { S: error },
+      ttl: { N: timeToLive.toString() },
+      lastSeen: { N: today.valueOf().toString() },
+      affectedFronts: { SS: [frontId] }
     }
   };
 }
