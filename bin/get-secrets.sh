@@ -2,7 +2,7 @@
 var AWS = require('aws-sdk');
 const s3 = new AWS.S3()
 
-
+# TODO pass in credentials as specific ENVARS, as we can't overwrite the ones used by riffraff in the TeamCity CI
 var bucket = process.argv[2];
 
 s3.getObject({
