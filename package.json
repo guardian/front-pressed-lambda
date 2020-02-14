@@ -25,7 +25,7 @@
   "scripts": {
     "lint": "eslint lambda/*.js test/*.js",
     "test": "jest",
-    "get-secrets": "./bin/get-secrets.sh $FRONT_PRESSED_LAMBDA_BUCKET > tmp/config.json",
+    "get-secrets": "mkdir tmp || true && ./bin/get-secrets.sh $FRONT_PRESSED_LAMBDA_BUCKET > tmp/config.json",
     "bundle": "npm run get-secrets && ncc build lambda/index.js -o dist -e aws-sdk -s",
     "teamcity:deploy": "npm run bundle && npx @guardian/node-riffraff-artifact",
     "start": "node lambda/index.js"
