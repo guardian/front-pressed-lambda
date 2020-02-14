@@ -9,23 +9,24 @@
   "isAwsLambda": true,
   "riffraffFile": "./riff-raff.yaml",
   "devDependencies": {
+    "@babel/core": "^7.8.4",
+    "@babel/preset-env": "^7.8.4",
     "ava": "^0.15.2",
     "aws-sdk": "^2.4.13",
-    "babel-plugin-external-helpers": "^6.8.0",
-    "babel-plugin-transform-es2015-destructuring": "^6.9.0",
-    "babel-plugin-transform-es2015-function-name": "^6.9.0",
-    "babel-plugin-transform-es2015-parameters": "^6.11.4",
-    "babel-plugin-transform-es2015-shorthand-properties": "^6.8.0",
-    "babel-plugin-transform-es2015-spread": "^6.8.0",
+    "aws-sdk-mock": "^5.0.0",
+    "babel-eslint": "^10.0.3",
+    "babel-jest": "^25.1.0",
     "eslint": "^3.2.2",
     "eslint-config-prettier": "^6.7.0",
+    "eslint-plugin-prettier": "^3.1.2",
+    "eslint-scope": "^5.0.0",
     "exec-chainable": "0.0.3",
     "gulp": "^3.9.1",
-    "gulp-babel": "^6.1.2",
     "gulp-yaml": "^1.0.1",
+    "jest": "^25.1.0",
     "node-riffraff-artefact": "^2.0.1",
     "rollup": "^0.34.3",
-    "rollup-plugin-babel": "^2.6.1",
+    "rollup-plugin-babel": "^4.3.3",
     "rollup-plugin-commonjs": "^3.3.1",
     "rollup-plugin-json": "^2.0.1",
     "rollup-plugin-node-resolve": "^2.0.0",
@@ -33,7 +34,8 @@
   },
   "scripts": {
     "lint": "eslint lambda/*.js test/*.js",
-    "test": "npm run bundle && ava",
+    "test": "jest",
+    "teamcity:deploy": "npx @guardian/node-riffraff-artifact",
     "start": "node lambda/index.js",
     "rollup": "rollup -c",
     "secrets": "./bin/get-secrets.sh $FRONT_PRESSED_LAMBDA_BUCKET > tmp/config.json",
@@ -41,7 +43,7 @@
     "deploy": "gulp deploy && VERBOSE=true ARTEFACT_PATH=$PWD riffraff-artefact"
   },
   "dependencies": {
-    "async-es": "^2.0.1",
+    "async": "^3.1.1",
     "simple-get-promise": "^1.0.2"
   }
 }

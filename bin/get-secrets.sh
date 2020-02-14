@@ -1,6 +1,10 @@
 #!/usr/bin/env node
 var AWS = require('aws-sdk');
-var s3 = new AWS.S3();
+const s3 = new AWS.S3({
+    region: 'eu-west-1',
+    credentials: new AWS.SharedIniFileCredentials({ profile: 'cmsFronts' }),
+})
+
 
 var bucket = process.argv[2];
 

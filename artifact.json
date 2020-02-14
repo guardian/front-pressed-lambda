@@ -1,0 +1,11 @@
+{
+  "projectName": "front-pressed-lambda",
+  "vcsURL": "https://github.com/guardian/front-pressed-lambda",
+  "actions": [
+    {
+      "action": "front-pressed-lambda",
+      "path": "./",
+      "compress": "zip"
+    }
+  ]
+}
