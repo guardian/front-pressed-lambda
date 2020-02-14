@@ -17,6 +17,7 @@ const TABLE_NAME = config.dynamo[STAGE].tableName;
 const ERRORS_TABLE_NAME = config.dynamo[STAGE].errorsTableName;
 const STALE_ERROR_THRESHOLD_MINUTES = 30;
 const TIME_TO_LIVE_HOURS = 24;
+const MAX_INCIDENT_LENGTH = 250;
 
 export function handler (event, context, callback) {
     const today = new Date();
@@ -56,7 +57,7 @@ export function storeEvents ({event, callback, dynamo, isoDate, logger, post, is
         PARALLEL_JOBS,
         (record, jobCallback) => putRecordToDynamo({jobs, record, dynamo, isoDate, logger, isProd, callback: jobCallback, post, today}),
         err => {
-            if (err && (err.statusCode && err.statusCode !== 200)) {
+            if (err) {
                 logger.error('Error processing records', err);
                 callback(new Error('Error when processing records: ' + err.message));
             } else {
@@ -165,9 +166,9 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                         logger.error('Error while fetching error item with message ', err);
                         callback();
                     } else {
-                        if (isProd) {
-                            const eventType = errorIsStale ? 'trigger' : 'resolve';
-                            return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger, eventType)
+
+                        if (errorIsStale && isProd) {
+                            return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger)
                             .then(callback)
                             .catch(callback);
                         } else {
@@ -185,7 +186,7 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
                       callback();
                   } else {
                       if (isProd) {
-                          return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger, 'trigger')
+                          return sendAlert(attributes, frontId, errorCount, error, dynamo, post, logger)
                           .then(callback)
                           .catch(callback);
                       } else {
@@ -196,7 +197,7 @@ function maybeNotifyPressBroken ({item, logger, isProd, post, dynamo, today, cal
           }
         });
     } else {
-        callback();
+      callback();
     }
 }
 
@@ -246,10 +247,9 @@ function getErrorCreateData (error, today, frontId) {
     };
 }
 
-function sendAlert (attributes, frontId, errorCount, error, dynamo, post, logger, eventType, extraDescription) {
+function sendAlert (attributes, frontId, errorCount, error, dynamo, post, logger) {
 
-  logger.log(`Notifying PagerDuty with eventType [${eventType}]`);
-  logger.log(attributes, frontId);
+  logger.log('Notifying pagerduty');
 
   return post({
       url: 'https://events.pagerduty.com/generic/2010-04-15/create_event.json',
@@ -257,10 +257,10 @@ function sendAlert (attributes, frontId, errorCount, error, dynamo, post, logger
           // eslint-disable-next-line camelcase
           service_key: config.pagerduty.key,
           // eslint-disable-next-line camelcase
-          event_type: eventType,
+          event_type: 'trigger',
           // eslint-disable-next-line camelcase
-          incident_key: frontId,
-          description: `Front ${frontId} failed pressing` + extraDescription,
+          incident_key: error.substring(0, MAX_INCIDENT_LENGTH),
+          description: `Front ${frontId} failed pressing`,
           details: {
               front: frontId,
               stage: attributes.stageName ? attributes.stageName.S : 'unknown',

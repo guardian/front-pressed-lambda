@@ -355,57 +355,6 @@ ava.test('send email when seeing an old error', function (test) {
             )
         )
     ));
-
-});
-
-ava.test('Sends an email if error has been seen recently', function (test) {
-    test.plan(4);
-
-    const dynamo = {
-        updateItem: dynamoUpdateForErrors,
-
-        getItem: function (record, callback) {
-            callback(null, {
-                Item: {
-                    error: { S: 'error'},
-                    lastSeen: { N: today.valueOf().toString() },
-                    affectedFronts: { SS: []}
-                }
-            });
-        }
-    };
-
-    const post = function () {
-        return Promise.resolve();
-    };
-
-    const dynamoGetSpy = sinon.spy(dynamo, 'getItem');
-    const dynamoUpdateSpy = sinon.spy(dynamo, 'updateItem');
-
-    const postSpy = sinon.spy(post);
-    invoke(kinesisEvent.withoutError, dynamo, postSpy, true, today);
-
-    test.true(dynamoGetSpy.calledOnce);
-
-    test.true(postSpy.called);
-
-    test.true(dynamoUpdateSpy.calledWith(
-        sinon.match.has(
-            'Key', sinon.match.has(
-                'error', sinon.match.has('S', 'error')
-            )
-        )
-    ));
-
-    test.true(dynamoUpdateSpy.calledWith(
-        sinon.match.has(
-            'AttributeUpdates', sinon.match.has(
-                'lastSeen', sinon.match.has(
-                    'Value', sinon.match.has('N', today.valueOf().toString())
-                  )
-            )
-        )
-    ));
 });
 
 ava.test('Record frontId when error reoccurs', function (test) {
