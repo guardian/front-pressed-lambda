@@ -21,6 +21,7 @@ const TABLE_NAME = config.dynamo[STAGE].tableName;
 const ERRORS_TABLE_NAME = config.dynamo[STAGE].errorsTableName;
 const STALE_ERROR_THRESHOLD_MINUTES = 30;
 const TIME_TO_LIVE_HOURS = 24;
+const MAX_INCIDENT_LENGTH = 250;
 
 export async function handler(event) {
   const today = new Date();
@@ -82,13 +83,12 @@ export async function storeEvents({
         callback: jobCallback ? jobCallback : () => {},
         post,
         today
-      }).catch(err => logger.error("Error processing records", err));
+      }).catch(err => {
+        logger.error("Error processing records", err);
+        throw err;
+      });
     }
-  ).catch(err => {
-    if (err.statusCode && err.statusCode !== 200) {
-      logger.error("Error processing records", err);
-    }
-  });
+  );
   logger.log("DONE");
   logger.log("Processed " + event.Records.length + " records.");
 }
@@ -152,7 +152,7 @@ async function putRecordToDynamo({
     dynamo,
     today,
     callback
-  }).catch(err => logger.error("maybeNotifyPressBroken Error", err));
+  });
 }
 
 async function maybeNotifyPressBroken({
@@ -214,7 +214,6 @@ async function maybeNotifyPressBroken({
           callback();
         });
       if (errorIsStale && isProd) {
-        const eventType = errorIsStale ? "trigger" : "resolve";
         return await sendAlert(
           attributes,
           frontId,
@@ -222,8 +221,7 @@ async function maybeNotifyPressBroken({
           error,
           dynamo,
           post,
-          logger,
-          eventType
+          logger
         );
       }
       callback();
@@ -295,21 +293,19 @@ export async function sendAlert(
   error,
   dynamo,
   post,
-  logger,
-  eventType,
-  extraDescription
+  logger
 ) {
-  logger.log(`Notifying PagerDuty with eventType [${eventType}]`);
+  logger.log("Notifying PagerDuty");
   return await post({
     url: "https://events.pagerduty.com/generic/2010-04-15/create_event.json",
     body: JSON.stringify({
       // eslint-disable-next-line camelcase
       service_key: config.pagerduty.key,
       // eslint-disable-next-line camelcase
-      event_type: eventType,
+      event_type: "trigger",
       // eslint-disable-next-line camelcase
-      incident_key: frontId,
-      description: `Front ${frontId} failed pressing` + extraDescription,
+      incident_key: error.substring(0, MAX_INCIDENT_LENGTH),
+      description: `Front ${frontId} failed pressing`,
       details: {
         front: frontId,
         stage: attributes.stageName ? attributes.stageName.S : "unknown",

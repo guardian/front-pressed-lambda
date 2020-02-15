@@ -234,25 +234,20 @@ describe("handler", () => {
         })
       );
 
-      const postParams = {
-        service_key: "pagerdutyKey",
-        event_type: "trigger",
-        incident_key: "someFrontId",
-        description: "Front someFrontId failed pressingundefined",
-        details: {
-          front: "someFrontId",
-          stage: "live",
-          count: 4,
-          error: "someMessage"
-        },
-        client: "Press monitor",
-        client_url: "faciaCodePath/troubleshoot/stale/someFrontId"
-      };
-
-      expect(postSpy).toHaveBeenCalledWith({
-        body: JSON.stringify(postParams),
-        url: "https://events.pagerduty.com/generic/2010-04-15/create_event.json"
-      });
+      expect(postSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          url:
+            "https://events.pagerduty.com/generic/2010-04-15/create_event.json"
+        })
+      );
+      expect(JSON.parse(postSpy.mock.calls[0][0].body)).toEqual(
+        expect.objectContaining({
+          service_key: "pagerdutyKey",
+          event_type: "trigger",
+          incident_key: "someMessage",
+          description: "Front someFrontId failed pressing"
+        })
+      );
     });
 
     it("alert PagerDuty when seeing an old error", async () => {
@@ -281,7 +276,7 @@ describe("handler", () => {
       expect(postSpyCallBody).toEqual(
         expect.objectContaining({
           event_type: "trigger",
-          description: "Front someFront1 failed pressingundefined"
+          description: "Front someFront1 failed pressing"
         })
       );
 
