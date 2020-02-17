@@ -1,6 +1,10 @@
 #!/usr/bin/env node
+
+process.env.AWS_ACCESS_KEY_ID = process.env.SECRETS_AWS_ACCESS_KEY_ID
+process.env.AWS_SECRET_ACCESS_KEY = process.env.SECRETS_AWS_SECRET_ACCESS_KEY
+
 var AWS = require('aws-sdk');
-var s3 = new AWS.S3();
+const s3 = new AWS.S3()
 
 var bucket = process.argv[2];
 

@@ -1,10 +1,14 @@
 {
     "env": {
+        "jest": true,
         "node": true,
             "es6": true
     },
     "extends":[ "eslint:recommended", "prettier"],
+    "parser": "babel-eslint",
+    "plugins": ["prettier"],
     "parserOptions": {
+        "allowImportExportEverywhere": true,
         "ecmaVersion": 6,
         "ecmaFeatures": {
             "globalReturn": true
@@ -12,7 +16,6 @@
         "sourceType": "module"
     },
     "rules": {
-        "camelcase": 2,
         "consistent-return": 0,
         "key-spacing": 0,
         "new-cap": 0,
@@ -28,7 +31,6 @@
         "quotes": [1, "double"],
         "semi": 2,
         "keyword-spacing": [2, {"before": true, "after": true}],
-        "space-before-function-paren": 1,
         "strict": 2,
         "array-callback-return": 1,
         "no-self-assign": 2,

@@ -1,0 +1,40 @@
+{
+	"dynamo": {
+		"CODE": {
+			"tableName": "codeTableName",
+			"errorsTableName": "codeErrTableName"
+		},
+		"PROD": {
+			"tableName": "prodTableName",
+			"errorsTableName": "prodErrTableName"
+		}
+	},
+	"AWS": {
+		"region": "someRegion",
+		"roleToAssume": {
+			"CODE": "codeRole",
+			"PROD": "prodRole"
+		}
+	},
+	"email": {
+		"lambda": "emailLambda",
+		"from": "emailFrom",
+		"to": ["emailTo"]
+	},
+	"facia": {
+		"CODE": {
+			"path": "faciaCodePath",
+			"dynamo": "faciaCodeDynamo"
+		},
+		"PROD": {
+			"path": "faciaProdPath",
+			"dynamo": "faciaProdDynamo"
+		}
+	},
+	"buckets": {
+		"config": "bucketConfig"
+	},
+	"pagerduty": {
+		"key": "pagerdutyKey"
+	}
+}

@@ -1,13 +1,17 @@
-import config from "../tmp/config.json";
 import AWS from "aws-sdk";
-import mapLimit from "async-es/mapLimit";
+import { mapLimit } from "async";
 import { post as postUtil } from "simple-get-promise";
 import errorParser from "./util/errorParser";
 
+const config =
+  process.env.NODE_ENV === "test"
+    ? require("../test/test-config.json")
+    : require("../tmp/config.json");
+
 AWS.config.region = config.AWS.region;
 
-const ERROR_THRESHOLD = 3;
-const PARALLEL_JOBS = 4;
+export const ERROR_THRESHOLD = 3;
+const NUMBER_OF_PARALLEL_JOBS = 4;
 const STAGE = (process.env.AWS_LAMBDA_FUNCTION_NAME || "CODE")
   .split("-")
   .filter(token => /(CODE?|PROD?)/.test(token))
@@ -19,52 +23,44 @@ const STALE_ERROR_THRESHOLD_MINUTES = 30;
 const TIME_TO_LIVE_HOURS = 24;
 const MAX_INCIDENT_LENGTH = 250;
 
-export function handler(event, context, callback) {
+export async function handler(event) {
   const today = new Date();
   const sts = new AWS.STS();
 
-  sts.assumeRole(
-    {
+  const data = await sts
+    .assumeRole({
       RoleArn: ROLE_TO_ASSUME,
       RoleSessionName: "lambda-assume-role",
       DurationSeconds: 900
-    },
-    (err, data) => {
-      if (err) {
-        console.error("Error assuming cross account role", err);
-        callback(err);
-      } else {
-        const stsCredentials = data.Credentials;
-        const assumedCredentials = new AWS.Credentials(
-          stsCredentials.AccessKeyId,
-          stsCredentials.SecretAccessKey,
-          stsCredentials.SessionToken
-        );
-        const dynamo = new AWS.DynamoDB({
-          credentials: assumedCredentials
-        });
-        const lambda = new AWS.Lambda({
-          credentials: assumedCredentials
-        });
-        storeEvents({
-          event,
-          dynamo,
-          lambda,
-          isoDate: today.toISOString(),
-          logger: console,
-          callback,
-          isProd: STAGE === "PROD",
-          post: postUtil,
-          today: today
-        });
-      }
-    }
+    })
+    .promise()
+    .catch(err => {
+      console.error("Error assuming cross account role", err);
+    });
+
+  const stsCredentials = data.Credentials;
+  const assumedCredentials = new AWS.Credentials(
+    stsCredentials.AccessKeyId,
+    stsCredentials.SecretAccessKey,
+    stsCredentials.SessionToken
   );
+  const dynamo = new AWS.DynamoDB({ credentials: assumedCredentials });
+  const lambda = new AWS.Lambda({ credentials: assumedCredentials });
+
+  await storeEvents({
+    event,
+    dynamo,
+    lambda,
+    isoDate: today.toISOString(),
+    logger: console,
+    isProd: STAGE === "PROD",
+    post: postUtil,
+    today: today
+  }).catch(err => console.error("storeEvents error:", err));
 }
 
-export function storeEvents({
+export async function storeEvents({
   event,
-  callback,
   dynamo,
   isoDate,
   logger,
@@ -73,35 +69,31 @@ export function storeEvents({
   today
 }) {
   const jobs = { started: 0, completed: 0, total: event.Records.length };
-
-  mapLimit(
+  await mapLimit(
     event.Records,
-    PARALLEL_JOBS,
-    (record, jobCallback) =>
-      putRecordToDynamo({
+    NUMBER_OF_PARALLEL_JOBS,
+    async (record, jobCallback) => {
+      await putRecordToDynamo({
         jobs,
         record,
         dynamo,
         isoDate,
         logger,
         isProd,
-        callback: jobCallback,
+        callback: jobCallback ? jobCallback : () => {},
         post,
         today
-      }),
-    err => {
-      if (err) {
+      }).catch(err => {
         logger.error("Error processing records", err);
-        callback(new Error("Error when processing records: " + err.message));
-      } else {
-        logger.log("DONE");
-        callback(null, "Processed " + event.Records.length + " records.");
-      }
+        throw err;
+      });
     }
   );
+  logger.log("DONE");
+  logger.log("Processed " + event.Records.length + " records.");
 }
 
-function putRecordToDynamo({
+async function putRecordToDynamo({
   jobs,
   record,
   dynamo,
@@ -116,7 +108,7 @@ function putRecordToDynamo({
 
   logger.log("Process job " + jobId + " in " + record.kinesis.sequenceNumber);
 
-  const buffer = new Buffer(record.kinesis.data, "base64");
+  const buffer = new Buffer.from(record.kinesis.data, "base64");
   const data = JSON.parse(buffer.toString("utf8"));
   const action = {
     SET: ["actionTime=:time", "statusCode=:status", "messageText=:message"]
@@ -130,8 +122,8 @@ function putRecordToDynamo({
     .map(key => `${key} ${action[key].join(", ")}`)
     .join(" ");
 
-  dynamo.updateItem(
-    {
+  const updatedItem = await dynamo
+    .updateItem({
       TableName: TABLE_NAME,
       Key: {
         stageName: { S: data.isLive ? "live" : "draft" },
@@ -145,27 +137,25 @@ function putRecordToDynamo({
         ":message": { S: data.message || data.status }
       },
       ReturnValues: "ALL_NEW"
-    },
-    (err, updatedItem) => {
-      if (err) {
-        logger.error("Error while processing " + jobId, err);
-        callback(err);
-      } else {
-        maybeNotifyPressBroken({
-          item: updatedItem,
-          logger,
-          isProd,
-          post,
-          dynamo,
-          today,
-          callback
-        });
-      }
-    }
-  );
+    })
+    .promise()
+    .catch(err => {
+      logger.error("Error while processing " + jobId, err);
+      callback(err);
+    });
+
+  await maybeNotifyPressBroken({
+    item: updatedItem,
+    logger,
+    isProd,
+    post,
+    dynamo,
+    today,
+    callback
+  });
 }
 
-function maybeNotifyPressBroken({
+async function maybeNotifyPressBroken({
   item,
   logger,
   isProd,
@@ -186,95 +176,79 @@ function maybeNotifyPressBroken({
   const isLive = attributes.stageName
     ? attributes.stageName.S === "live"
     : false;
+
   if (isLive && errorCount >= ERROR_THRESHOLD) {
-    dynamo.getItem(
-      {
+    const data = await dynamo
+      .getItem({
         TableName: ERRORS_TABLE_NAME,
         Key: { error: { S: error } }
-      },
-      (err, data) => {
-        if (err) {
+      })
+      .promise()
+      .catch(err => {
+        logger.error("Error while fetching error item with message ", err);
+        callback();
+      });
+    if (data && data.Item) {
+      const lastSeen = new Date(parseInt(data.Item.lastSeen.N));
+      const lastSeenThreshold = new Date().setMinutes(
+        today.getMinutes() - STALE_ERROR_THRESHOLD_MINUTES
+      );
+      const errorIsStale = lastSeen.valueOf() < lastSeenThreshold;
+
+      let affectedFronts = new Set(data.Item.affectedFronts.SS);
+
+      if (errorIsStale) {
+        affectedFronts = [frontId];
+      } else {
+        const frontSet = new Set(data.Item.affectedFronts.SS);
+        affectedFronts = Array.from(frontSet.add(frontId));
+      }
+
+      const updateErrorData = getErrorUpdateData(error, affectedFronts, today);
+
+      await dynamo
+        .updateItem(updateErrorData)
+        .promise()
+        .catch(err => {
           logger.error("Error while fetching error item with message ", err);
           callback();
-        }
-
-        if (data && data.Item) {
-          const lastSeen = new Date(parseInt(data.Item.lastSeen.N));
-          const lastSeenThreshold = new Date().setMinutes(
-            today.getMinutes() - STALE_ERROR_THRESHOLD_MINUTES
-          );
-          const errorIsStale = lastSeen.valueOf() < lastSeenThreshold;
-
-          let affectedFronts = new Set(data.Item.affectedFronts.SS);
-
-          if (errorIsStale) {
-            affectedFronts = [frontId];
-          } else {
-            const frontSet = new Set(data.Item.affectedFronts.SS);
-            affectedFronts = Array.from(frontSet.add(frontId));
-          }
-
-          const updateErrorData = getErrorUpdateData(
-            error,
-            affectedFronts,
-            today
-          );
-          dynamo.updateItem(updateErrorData, err => {
-            if (err) {
-              logger.error(
-                "Error while fetching error item with message ",
-                err
-              );
-              callback();
-            } else {
-              if (errorIsStale && isProd) {
-                return sendAlert(
-                  attributes,
-                  frontId,
-                  errorCount,
-                  error,
-                  dynamo,
-                  post,
-                  logger
-                )
-                  .then(callback)
-                  .catch(callback);
-              } else {
-                callback();
-              }
-            }
-          });
-        } else {
-          const newErrorData = getErrorCreateData(error, today, frontId);
-
-          dynamo.putItem(newErrorData, err => {
-            if (err) {
-              logger.error(
-                "Error while fetching error item with message ",
-                err
-              );
-              callback();
-            } else {
-              if (isProd) {
-                return sendAlert(
-                  attributes,
-                  frontId,
-                  errorCount,
-                  error,
-                  dynamo,
-                  post,
-                  logger
-                )
-                  .then(callback)
-                  .catch(callback);
-              } else {
-                callback();
-              }
-            }
-          });
-        }
+        });
+      if (errorIsStale && isProd) {
+        return await sendAlert(
+          attributes,
+          frontId,
+          errorCount,
+          error,
+          dynamo,
+          post,
+          logger
+        );
       }
-    );
+      callback();
+    } else {
+      const newErrorData = getErrorCreateData(error, today, frontId);
+
+      await dynamo
+        .putItem(newErrorData)
+        .promise()
+        .catch(async err => {
+          logger.error("Error while fetching error item with message ", err);
+          callback();
+          if (isProd) {
+            return await sendAlert(
+              attributes,
+              frontId,
+              errorCount,
+              error,
+              dynamo,
+              post,
+              logger,
+              "trigger"
+            );
+          }
+          callback();
+        });
+    }
   } else {
     callback();
   }
@@ -312,7 +286,7 @@ function getErrorCreateData(error, today, frontId) {
   };
 }
 
-function sendAlert(
+export async function sendAlert(
   attributes,
   frontId,
   errorCount,
@@ -321,9 +295,8 @@ function sendAlert(
   post,
   logger
 ) {
-  logger.log("Notifying pagerduty");
-
-  return post({
+  logger.log("Notifying PagerDuty");
+  return await post({
     url: "https://events.pagerduty.com/generic/2010-04-15/create_event.json",
     body: JSON.stringify({
       // eslint-disable-next-line camelcase
