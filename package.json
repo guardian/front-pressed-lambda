@@ -31,7 +31,7 @@
     "start": "node lambda/index.js"
   },
   "dependencies": {
-    "async": "^3.1.1",
+    "async": "^3.2.0",
     "simple-get-promise": "^1.0.2"
   }
 }
