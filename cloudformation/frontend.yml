@@ -153,6 +153,10 @@ Resources:
                     Ref: DistBucket
                 S3Key: !Sub '${Stack}/${Stage}/front-pressed-lambda/front-pressed-lambda.zip'
             Description: Store press notification in Dynamo
+            Environment:
+                Variables:
+                    CONFIG_BUCKET: !Ref DistBucket
+                    STAGE: !Ref Stage
             Handler: index.handler
             MemorySize: 128
             Role:
