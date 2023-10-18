@@ -232,11 +232,11 @@ async function maybeNotifyPressBroken({
       await dynamo
         .putItem(newErrorData)
         .promise()
-        .catch(async err => {
+        .catch(err => {
           logger.error("Error while fetching error item with message ", err);
           callback();
           if (isProd) {
-            return await sendAlert(
+            return sendAlert(
               config,
               attributes,
               frontId,
