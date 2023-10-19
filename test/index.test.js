@@ -7,7 +7,7 @@ const SHOW_LOGS = false;
 
 const date = new Date("2016-03-24").toISOString();
 
-const config = require("../test/test-config.json")
+const config = require("../test/test-config.json");
 
 async function invoke(event, dynamo, post, prod, today) {
   const logger = SHOW_LOGS

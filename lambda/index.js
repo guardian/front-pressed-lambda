@@ -3,7 +3,7 @@ import { mapLimit } from "async";
 import { post as postUtil } from "simple-get-promise";
 import errorParser from "./util/errorParser";
 
-const STAGE = process.env.STAGE || "CODE"
+const STAGE = process.env.STAGE || "CODE";
 
 export const ERROR_THRESHOLD = 3;
 const NUMBER_OF_PARALLEL_JOBS = 4;
