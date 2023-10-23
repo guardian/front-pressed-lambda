@@ -4,8 +4,8 @@ Store front pressed information
 
 Facia press continuously presses new fronts and sends Kinesis update on the status.
 
-This lambda listens to Kinesis and store last press date in Dynamo DB.
-If the error count is above a threshold, it sends an alert mail.
+This lambda, living in the frontend account, listens to Kinesis and store last press date in a Dynamo DB table in the cms-fronts account.
+If the error count is above a threshold, it sends an alert mail via pagerduty.
 
 
 ### Unit tests
