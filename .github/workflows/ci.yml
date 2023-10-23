@@ -1,0 +1,60 @@
+name: build
+
+on:
+  push:
+    branches: ["main"]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions: # required by aws-actions/configure-aws-credentials
+      id-token: write
+      contents: read
+
+    steps:
+      # Seed the build number with last number from TeamCity.
+      # This env var is used by the JS, and SBT builds, and guardian/actions-riff-raff.
+      # Set the value early, rather than `buildNumberOffset` in guardian/actions-riff-raff, to ensure each usage has the same number.
+      # For some reason, it's not possible to mutate GITHUB_RUN_NUMBER, so set BUILD_NUMBER instead.
+      - name: Set BUILD_NUMBER environment variable
+        run: |
+          LAST_TEAMCITY_BUILD=199
+          echo "BUILD_NUMBER=$(( $GITHUB_RUN_NUMBER + $LAST_TEAMCITY_BUILD ))" >> $GITHUB_ENV
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v3
+        with:
+         node-version-file: '.nvmrc'
+         cache: npm
+         cache-dependency-path: 'package-lock.json'
+
+      - name: Install NPM dependencies
+        run: npm ci
+
+      - name: Run lint
+        run: npm run lint
+      
+      - name: Test JS
+        run: npm test
+
+      - name: Build JS
+        run: npm run bundle
+    
+      - name: AWS Auth
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.GU_RIFF_RAFF_ROLE_ARN }}
+          aws-region: eu-west-1
+
+      - uses: guardian/actions-riff-raff@v2
+
+        with:
+          projectName: front-pressed-lambda
+          buildNumber: ${{ env.BUILD_NUMBER }}
+          configPath: riff-raff.yaml
+          contentDirectories: |
+            front-pressed-lambda:
+              - dist/front-pressed-lambda.zip
