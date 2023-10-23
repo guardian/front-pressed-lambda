@@ -40,7 +40,7 @@ jobs:
       - name: Test JS
         run: npm test
 
-      - name: Build JS
+      - name: Build and zip JS
         run: npm run bundle
     
       - name: AWS Auth
