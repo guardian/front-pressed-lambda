@@ -2,7 +2,7 @@
 
 set -e
 
-npm ci
+npm install
 npm run lint
 npm test
 npm run teamcity:deploy
