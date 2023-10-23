@@ -3,33 +3,28 @@ import { mapLimit } from "async";
 import { post as postUtil } from "simple-get-promise";
 import errorParser from "./util/errorParser";
 
-const config =
-  process.env.NODE_ENV === "test"
-    ? require("../test/test-config.json")
-    : require("../tmp/config.json");
-
-AWS.config.region = config.AWS.region;
+const STAGE = process.env.STAGE || "CODE";
 
 export const ERROR_THRESHOLD = 3;
 const NUMBER_OF_PARALLEL_JOBS = 4;
-const STAGE = (process.env.AWS_LAMBDA_FUNCTION_NAME || "CODE")
-  .split("-")
-  .filter(token => /(CODE?|PROD?)/.test(token))
-  .pop();
-const ROLE_TO_ASSUME = config.AWS.roleToAssume[STAGE];
-const TABLE_NAME = config.dynamo[STAGE].tableName;
-const ERRORS_TABLE_NAME = config.dynamo[STAGE].errorsTableName;
 const STALE_ERROR_THRESHOLD_MINUTES = 30;
 const TIME_TO_LIVE_HOURS = 24;
 const MAX_INCIDENT_LENGTH = 250;
 
-export async function handler(event) {
+export async function handler(event) {  
+  const config = JSON.parse(
+    await new AWS.S3().getObject({Bucket: process.env.CONFIG_BUCKET, Key: "config.json"}).promise()
+    .then(_=>_.Body.toString("utf-8"))
+  );
+  
+  AWS.config.region = config.AWS.region;
+
   const today = new Date();
   const sts = new AWS.STS();
 
   const data = await sts
     .assumeRole({
-      RoleArn: ROLE_TO_ASSUME,
+      RoleArn: config.AWS.roleToAssume[STAGE],
       RoleSessionName: "lambda-assume-role",
       DurationSeconds: 900
     })
@@ -48,6 +43,7 @@ export async function handler(event) {
   const lambda = new AWS.Lambda({ credentials: assumedCredentials });
 
   await storeEvents({
+    config,
     event,
     dynamo,
     lambda,
@@ -60,6 +56,7 @@ export async function handler(event) {
 }
 
 export async function storeEvents({
+  config,
   event,
   dynamo,
   isoDate,
@@ -74,6 +71,7 @@ export async function storeEvents({
     NUMBER_OF_PARALLEL_JOBS,
     async (record, jobCallback) => {
       await putRecordToDynamo({
+        config,
         jobs,
         record,
         dynamo,
@@ -94,6 +92,7 @@ export async function storeEvents({
 }
 
 async function putRecordToDynamo({
+  config,
   jobs,
   record,
   dynamo,
@@ -124,7 +123,7 @@ async function putRecordToDynamo({
 
   const updatedItem = await dynamo
     .updateItem({
-      TableName: TABLE_NAME,
+      TableName: config.dynamo[STAGE].tableName,
       Key: {
         stageName: { S: data.isLive ? "live" : "draft" },
         frontId: { S: data.front }
@@ -145,6 +144,7 @@ async function putRecordToDynamo({
     });
 
   await maybeNotifyPressBroken({
+    config,
     item: updatedItem,
     logger,
     isProd,
@@ -156,6 +156,7 @@ async function putRecordToDynamo({
 }
 
 async function maybeNotifyPressBroken({
+  config,
   item,
   logger,
   isProd,
@@ -180,7 +181,7 @@ async function maybeNotifyPressBroken({
   if (isLive && errorCount >= ERROR_THRESHOLD) {
     const data = await dynamo
       .getItem({
-        TableName: ERRORS_TABLE_NAME,
+        TableName: config.dynamo[STAGE].errorsTableName,
         Key: { error: { S: error } }
       })
       .promise()
@@ -204,7 +205,7 @@ async function maybeNotifyPressBroken({
         affectedFronts = Array.from(frontSet.add(frontId));
       }
 
-      const updateErrorData = getErrorUpdateData(error, affectedFronts, today);
+      const updateErrorData = getErrorUpdateData(error, affectedFronts, today, config.dynamo[STAGE].errorsTableName);
 
       await dynamo
         .updateItem(updateErrorData)
@@ -215,32 +216,32 @@ async function maybeNotifyPressBroken({
         });
       if (errorIsStale && isProd) {
         return await sendAlert(
+          config,
           attributes,
           frontId,
           errorCount,
           error,
-          dynamo,
           post,
           logger
         );
       }
       callback();
     } else {
-      const newErrorData = getErrorCreateData(error, today, frontId);
+      const newErrorData = getErrorCreateData(error, today, frontId, config.dynamo[STAGE].errorsTableName);
 
       await dynamo
         .putItem(newErrorData)
         .promise()
-        .catch(async err => {
+        .catch(err => {
           logger.error("Error while fetching error item with message ", err);
           callback();
           if (isProd) {
-            return await sendAlert(
+            return sendAlert(
+              config,
               attributes,
               frontId,
               errorCount,
               error,
-              dynamo,
               post,
               logger,
               "trigger"
@@ -254,9 +255,9 @@ async function maybeNotifyPressBroken({
   }
 }
 
-function getErrorUpdateData(error, affectedFronts, today) {
+function getErrorUpdateData(error, affectedFronts, today, errorsTableName) {
   return {
-    TableName: ERRORS_TABLE_NAME,
+    TableName: errorsTableName,
     Key: { error: { S: error } },
     AttributeUpdates: {
       lastSeen: {
@@ -271,12 +272,12 @@ function getErrorUpdateData(error, affectedFronts, today) {
   };
 }
 
-function getErrorCreateData(error, today, frontId) {
+function getErrorCreateData(error, today, frontId, errorsTableName) {
   const timeToLive = Math.floor(
     new Date().setHours(today.getHours() + TIME_TO_LIVE_HOURS).valueOf() / 1000
   );
   return {
-    TableName: ERRORS_TABLE_NAME,
+    TableName: errorsTableName,
     Item: {
       error: { S: error },
       ttl: { N: timeToLive.toString() },
@@ -287,11 +288,11 @@ function getErrorCreateData(error, today, frontId) {
 }
 
 export async function sendAlert(
+  config,
   attributes,
   frontId,
   errorCount,
   error,
-  dynamo,
   post,
   logger
 ) {
