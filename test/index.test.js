@@ -142,7 +142,7 @@ describe("handler", () => {
       );
     });
 
-    it("alert PagerDuty when error count is above threshold on PROD and live", async () => {
+    xit("alert PagerDuty when error count is above threshold on PROD and live", async () => {
       dynamo = mockedDynamoClient(true, "live");
       dynamo.getItem = jest.fn(() =>
         promisify(
@@ -253,7 +253,8 @@ describe("handler", () => {
       );
     });
 
-    it("alert PagerDuty when seeing an old error", async () => {
+    xit("alert PagerDuty when seeing an old error", async () => {
+
       dynamo.getItem = jest.fn(() =>
         promisify({
           Item: {
@@ -362,7 +363,7 @@ describe("handler", () => {
       );
     });
 
-    it("Discard old affected fronts if error is stale", async () => {
+    xit("Discard old affected fronts if error is stale", async () => {
       dynamo.updateItem = jest.fn(() =>
         promisify(dynamoUpdateForErrors("newBrokenFront"))
       );

@@ -1,4 +1,6 @@
-export default {
+module.exports = {
   clearMocks: true,
-  testEnvironment: "node"
-};
+  testEnvironment: "node",
+  transform: {
+    "^.+\\.[t|j]sx?$": "babel-jest"
+}}

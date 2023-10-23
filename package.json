@@ -8,7 +8,6 @@
   "buildDir": "tmp/lambda",
   "isAwsLambda": true,
   "riffraffFile": "./riff-raff.yaml",
-  "type": "module",
   "devDependencies": {
     "@vercel/ncc": "^0.38.1",
     "aws-sdk": "^2.4.13",
@@ -22,10 +21,11 @@
   "scripts": {
     "lint": "eslint lambda/*.js test/*.js",
     "test": "NODE_OPTIONS=--experimental-vm-modules jest",
-    "bundle": "ncc build lambda/index.js -o dist -e aws-sdk -s && (cd dist; zip front-pressed-lambda.zip index.js)",
+    "bundle": "ncc build lambda/index.js -o dist -e aws-sdk -s && (cd dist; zip front-pressed-lambda.zip *)",
     "start": "node lambda/index.js"
   },
   "dependencies": {
+    "@babel/preset-env": "^7.23.2",
     "@jest/globals": "^29.7.0",
     "async": "^3.1.1",
     "simple-get-promise": "^1.0.2"
