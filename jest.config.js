@@ -1,5 +1,5 @@
 export default {
   clearMocks: true,
   testEnvironment: "node",
-  transformIgnorePatterns: []
+  transformIgnorePatterns: ["!node_modules/"]
 };
