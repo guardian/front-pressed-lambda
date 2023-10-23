@@ -21,7 +21,7 @@ jobs:
       # For some reason, it's not possible to mutate GITHUB_RUN_NUMBER, so set BUILD_NUMBER instead.
       - name: Set BUILD_NUMBER environment variable
         run: |
-          LAST_TEAMCITY_BUILD=199
+          LAST_TEAMCITY_BUILD=200
           echo "BUILD_NUMBER=$(( $GITHUB_RUN_NUMBER + $LAST_TEAMCITY_BUILD ))" >> $GITHUB_ENV
       - uses: actions/checkout@v4
 
@@ -32,7 +32,7 @@ jobs:
          cache-dependency-path: 'package-lock.json'
 
       - name: Install NPM dependencies
-        run: npm ci
+        run: npm install
 
       - name: Run lint
         run: npm run lint
