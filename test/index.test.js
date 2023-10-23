@@ -1,13 +1,14 @@
 import kinesisEvent from "./fixtures/kinesisEvent.fixture";
 import errorParser from "../lambda/util/errorParser";
 import { ERROR_THRESHOLD, storeEvents } from "../lambda/index";
+import {jest} from "@jest/globals";
 // import { get } from "simple-get-promise";
 
 const SHOW_LOGS = false;
 
 const date = new Date("2016-03-24").toISOString();
 
-const config = require("../test/test-config.json");
+import config from "../test/test-config.json";
 
 async function invoke(event, dynamo, post, prod, today) {
   const logger = SHOW_LOGS

@@ -8,6 +8,7 @@
   "buildDir": "tmp/lambda",
   "isAwsLambda": true,
   "riffraffFile": "./riff-raff.yaml",
+  "type": "module",
   "devDependencies": {
     "@vercel/ncc": "^0.38.1",
     "aws-sdk": "^2.4.13",
@@ -20,12 +21,13 @@
   },
   "scripts": {
     "lint": "eslint lambda/*.js test/*.js",
-    "test": "jest",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "bundle": "ncc build lambda/index.js -o dist -e aws-sdk -s",
     "teamcity:deploy": "npm run bundle && npx @guardian/node-riffraff-artifact",
     "start": "node lambda/index.js"
   },
   "dependencies": {
+    "@jest/globals": "^29.7.0",
     "async": "^3.1.1",
     "simple-get-promise": "^1.0.2"
   }
