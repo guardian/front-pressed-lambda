@@ -17,7 +17,7 @@ function encode(message) {
   return buffer.toString("base64");
 }
 
-module.exports = {
+export default {
   withoutError: {
     Records: [
       {
