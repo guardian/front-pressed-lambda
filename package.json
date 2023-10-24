@@ -25,7 +25,7 @@
   "scripts": {
     "lint": "eslint lambda/*.js test/*.js",
     "test": "jest",
-    "bundle": "ncc build lambda/index.js -o dist -e aws-sdk -s && (cd dist; zip front-pressed-lambda.zip index.js)",
+    "bundle": "ncc build lambda/index.js -o dist -e aws-sdk -s && (cd dist; zip front-pressed-lambda.zip *)",
     "start": "node lambda/index.js"
   },
   "dependencies": {
