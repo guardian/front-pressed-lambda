@@ -1,10 +1,11 @@
 name: build
 
 on:
-  push:
-    branches: ["main"]
-  pull_request:
   workflow_dispatch:
+  pull_request:
+  push:
+    branches:
+      - main # merge
 
 jobs:
   build:
@@ -32,17 +33,17 @@ jobs:
          cache-dependency-path: 'package-lock.json'
 
       - name: Install NPM dependencies
-        run: npm ci
+        run: npm clean-install --legacy-peer-deps # --legacy-peer-deps avoids babel dep. related failures
 
       - name: Run lint
         run: npm run lint
-      
+
       - name: Test JS
         run: npm test
 
       - name: Build JS
         run: npm run bundle
-    
+
       - name: AWS Auth
         uses: aws-actions/configure-aws-credentials@v4
         with:
