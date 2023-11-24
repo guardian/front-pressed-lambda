@@ -138,6 +138,9 @@ Resources:
             TimeToLiveSpecification:
                 AttributeName: ttl
                 Enabled: true
+            Tags:
+                - Key: devx-backup-enabled
+                  Value: true
 
     SendEmail:
         Type: AWS::IAM::Policy
