@@ -81,7 +81,7 @@ Resources:
                                     - ":"
                                     - Ref: "AWS::AccountId"
                                     - ":table/"
-                                    - Ref: MMTestFrontsErrorsDynamoDBTable
+                                    - Ref: FrontsErrorsDynamoDBTable
             Roles:
                 - Ref: AssumedRole
     DynamoDBTable:
@@ -112,10 +112,10 @@ Resources:
                         - StageMap
                         - Ref: Stage
                         - WriteThroughput
-    MMTestFrontsErrorsDynamoDBTable:
+    FrontsErrorsDynamoDBTable:
         Type: AWS::DynamoDB::Table
         Properties:
-            TableName: !Sub 'mm-test-front-pressed-lambda-errors-${Stage}'
+            TableName: !Sub 'front-pressed-lambda-errors-${Stage}'
             AttributeDefinitions:
                 -
                     AttributeName: error
