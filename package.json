@@ -4,7 +4,7 @@
   "main": "lambda/index.js",
   "version": "0.0.1",
   "license": "Apache-2.0",
-  "cloudformation": false,
+  "cloudformation": true,
   "buildDir": "tmp/lambda",
   "isAwsLambda": true,
   "riffraffFile": "./riff-raff.yaml",
