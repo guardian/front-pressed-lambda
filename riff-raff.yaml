@@ -1,9 +1,13 @@
-regions: [eu-west-1]
-stacks: [frontend]
-
+allowedStages:
+  - CODE
+  - PROD
 deployments:
   front-pressed-lambda:
     type: aws-lambda
+    regions:
+      - eu-west-1
+    stacks:
+      - frontend
     contentDirectory: front-pressed-lambda
     parameters:
       bucket: aws-front-pressed-lambda-dist
@@ -14,4 +18,23 @@ deployments:
         PROD:
           filename: front-pressed-lambda.zip
           name: front-pressed-lambda-PROD-Lambda-12VCTV2MBIBW0
-
+  push-cms-fronts-template-to-s3:
+    type: aws-s3
+    regions:
+      - eu-west-1
+    stacks:
+      - cms-fronts
+    actions:
+      - uploadStaticFiles
+    parameters:
+      bucket: front-pressed-lambda
+      cacheControl: no-cache
+      publicReadAcl: false
+  front-pressed-lambda-cms-fronts-template:
+    type: cloud-formation
+    regions:
+      - eu-west-1
+    stacks:
+      - cms-fronts
+    app: front-pressed-lambda
+    contentDirectory: cloudformation
