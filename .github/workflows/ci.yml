@@ -14,6 +14,8 @@ jobs:
     permissions: # required by aws-actions/configure-aws-credentials
       id-token: write
       contents: read
+      # Required for `guardian/actions-riff-raff`
+      pull-requests: write
 
     steps:
       # Seed the build number with last number from TeamCity.
