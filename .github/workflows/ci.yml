@@ -14,6 +14,8 @@ jobs:
     permissions: # required by aws-actions/configure-aws-credentials
       id-token: write
       contents: read
+      # Required for `guardian/actions-riff-raff`
+      pull-requests: write
 
     steps:
       # Seed the build number with last number from TeamCity.
@@ -50,12 +52,35 @@ jobs:
           role-to-assume: ${{ secrets.GU_RIFF_RAFF_ROLE_ARN }}
           aws-region: eu-west-1
 
-      - uses: guardian/actions-riff-raff@v2
-
+      - uses: guardian/actions-riff-raff@v3
         with:
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
           projectName: front-pressed-lambda
           buildNumber: ${{ env.BUILD_NUMBER }}
           configPath: riff-raff.yaml
           contentDirectories: |
             front-pressed-lambda:
               - dist/front-pressed-lambda.zip
+
+      - uses: guardian/actions-riff-raff@v3
+        with:
+          githubToken: ${{ secrets.GITHUB_TOKEN }}
+          projectName: front-pressed-lambda::cloudformation
+          config: |
+            stacks:
+              - cms-fronts
+            regions:
+              - eu-west-1
+            allowedStages:
+              - CODE
+              - PROD
+            deployments:
+              cloudformation:
+                type: cloud-formation
+                app: front-pressed-lambda
+                parameters:
+                  templatePath: cmsfronts.yml
+                  createStackIfAbsent: false
+          contentDirectories: |
+            cloudformation:
+              - cloudformation/cmsfronts.yml
