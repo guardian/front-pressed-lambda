@@ -112,6 +112,9 @@ Resources:
                         - StageMap
                         - Ref: Stage
                         - WriteThroughput
+            Tags:
+                - Key: devx-backup-enabled
+                  Value: true
     FrontsErrorsDynamoDBTable:
         Type: AWS::DynamoDB::Table
         Properties:
@@ -138,6 +141,9 @@ Resources:
             TimeToLiveSpecification:
                 AttributeName: ttl
                 Enabled: true
+            Tags:
+                - Key: devx-backup-enabled
+                  Value: true
 
     SendEmail:
         Type: AWS::IAM::Policy
