@@ -20,7 +20,7 @@
     "eslint-plugin-prettier": "^3.1.2",
     "eslint-scope": "^5.0.0",
     "exec-chainable": "0.0.3",
-    "jest": "^25.1.0"
+    "jest": "^29.7.0"
   },
   "scripts": {
     "lint": "eslint lambda/*.js test/*.js",
