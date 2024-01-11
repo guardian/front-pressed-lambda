@@ -61,6 +61,8 @@ jobs:
           contentDirectories: |
             front-pressed-lambda:
               - dist/front-pressed-lambda.zip
+            front-pressed-lambda-cloudformation:
+              - cloudformation/frontend.yml
 
       - uses: guardian/actions-riff-raff@v3
         with:
