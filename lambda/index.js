@@ -17,7 +17,7 @@ const MAX_INCIDENT_LENGTH = 250;
 export async function handler(event) {  
   const config = JSON.parse(
     await new S3().getObject({Bucket: process.env.CONFIG_BUCKET, Key: "config.json"})
-    .then(_=>_.Body.toString("utf-8"))
+    .then(_=>_.Body.transformToString("utf-8"))
   );
 
   const today = new Date();
