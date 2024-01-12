@@ -78,7 +78,7 @@ const promisify = (returnedValue, success = true) =>
   new Promise((resolve, reject) => {
     const resolution = success ? resolve : reject;
     resolution(returnedValue);
-  })
+  });
 
 const mockedDynamoClient = (overThreshold = true, stageName) => ({
   updateItem: () => promisify(updateItemResponse(overThreshold, stageName)),
