@@ -1,4 +1,7 @@
-import AWS from "aws-sdk";
+import { DynamoDB } from "@aws-sdk/client-dynamodb";
+import { Lambda } from "@aws-sdk/client-lambda";
+import { S3 } from "@aws-sdk/client-s3";
+import { STS } from "@aws-sdk/client-sts";
 import { mapLimit } from "async";
 import { post as postUtil } from "simple-get-promise";
 import errorParser from "./util/errorParser";
@@ -13,14 +16,14 @@ const MAX_INCIDENT_LENGTH = 250;
 
 export async function handler(event) {  
   const config = JSON.parse(
-    await new AWS.S3().getObject({Bucket: process.env.CONFIG_BUCKET, Key: "config.json"}).promise()
-    .then(_=>_.Body.toString("utf-8"))
+    await new S3().getObject({Bucket: process.env.CONFIG_BUCKET, Key: "config.json"})
+    .then(_=>_.Body.transformToString("utf-8"))
   );
-  
-  AWS.config.region = config.AWS.region;
 
   const today = new Date();
-  const sts = new AWS.STS();
+  const sts = new STS({
+    region: config.AWS.region
+  });
 
   const data = await sts
     .assumeRole({
@@ -28,19 +31,24 @@ export async function handler(event) {
       RoleSessionName: "lambda-assume-role",
       DurationSeconds: 900
     })
-    .promise()
     .catch(err => {
       console.error("Error assuming cross account role", err);
     });
 
   const stsCredentials = data.Credentials;
-  const assumedCredentials = new AWS.Credentials(
-    stsCredentials.AccessKeyId,
-    stsCredentials.SecretAccessKey,
-    stsCredentials.SessionToken
-  );
-  const dynamo = new AWS.DynamoDB({ credentials: assumedCredentials });
-  const lambda = new AWS.Lambda({ credentials: assumedCredentials });
+  const assumedCredentials = {
+    accessKeyId: stsCredentials.AccessKeyId,
+    secretAccessKey: stsCredentials.SecretAccessKey,
+    sessionToken: stsCredentials.SessionToken
+  };
+  const dynamo = new DynamoDB({
+    credentials: assumedCredentials,
+    region: config.AWS.region
+  });
+  const lambda = new Lambda({
+    credentials: assumedCredentials,
+    region: config.AWS.region
+  });
 
   await storeEvents({
     config,
@@ -137,7 +145,6 @@ async function putRecordToDynamo({
       },
       ReturnValues: "ALL_NEW"
     })
-    .promise()
     .catch(err => {
       logger.error("Error while processing " + jobId, err);
       callback(err);
@@ -184,7 +191,6 @@ async function maybeNotifyPressBroken({
         TableName: config.dynamo[STAGE].errorsTableName,
         Key: { error: { S: error } }
       })
-      .promise()
       .catch(err => {
         logger.error("Error while fetching error item with message ", err);
         callback();
@@ -209,7 +215,6 @@ async function maybeNotifyPressBroken({
 
       await dynamo
         .updateItem(updateErrorData)
-        .promise()
         .catch(err => {
           logger.error("Error while fetching error item with message ", err);
           callback();
@@ -231,7 +236,6 @@ async function maybeNotifyPressBroken({
 
       await dynamo
         .putItem(newErrorData)
-        .promise()
         .catch(err => {
           logger.error("Error while fetching error item with message ", err);
           callback();
