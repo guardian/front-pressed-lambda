@@ -2,6 +2,12 @@ regions: [eu-west-1]
 stacks: [frontend]
 
 deployments:
+  front-pressed-lambda-cloudformation:
+    type: cloud-formation
+    app: front-pressed-lambda
+    parameters:
+      templatePath: frontend.yml
+      createStackIfAbsent: false
   front-pressed-lambda:
     type: aws-lambda
     contentDirectory: front-pressed-lambda
@@ -14,4 +20,5 @@ deployments:
         PROD:
           filename: front-pressed-lambda.zip
           name: front-pressed-lambda-PROD-Lambda-12VCTV2MBIBW0
-
+    dependencies:
+      - front-pressed-lambda-cloudformation
