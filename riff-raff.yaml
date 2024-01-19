@@ -12,7 +12,6 @@ deployments:
     type: aws-lambda
     contentDirectory: front-pressed-lambda
     parameters:
-      bucket: aws-front-pressed-lambda-dist
       functions:
         CODE:
           filename: front-pressed-lambda.zip
