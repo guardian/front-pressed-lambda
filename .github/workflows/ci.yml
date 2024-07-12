@@ -11,7 +11,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
-    permissions: # required by aws-actions/configure-aws-credentials
+    permissions: # required by `guardian/actions-riff-raff`
       id-token: write
       contents: read
       # Required for `guardian/actions-riff-raff`
@@ -46,15 +46,10 @@ jobs:
       - name: Build JS
         run: npm run bundle
 
-      - name: AWS Auth
-        uses: aws-actions/configure-aws-credentials@v4
-        with:
-          role-to-assume: ${{ secrets.GU_RIFF_RAFF_ROLE_ARN }}
-          aws-region: eu-west-1
-
-      - uses: guardian/actions-riff-raff@v3
+      - uses: guardian/actions-riff-raff@v4
         with:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
+          roleArn: ${{ secrets.GU_RIFF_RAFF_ROLE_ARN }}
           projectName: front-pressed-lambda
           buildNumber: ${{ env.BUILD_NUMBER }}
           configPath: riff-raff.yaml
@@ -64,9 +59,10 @@ jobs:
             front-pressed-lambda-cloudformation:
               - cloudformation/frontend.yml
 
-      - uses: guardian/actions-riff-raff@v3
+      - uses: guardian/actions-riff-raff@v4
         with:
           githubToken: ${{ secrets.GITHUB_TOKEN }}
+          roleArn: ${{ secrets.GU_RIFF_RAFF_ROLE_ARN }}
           projectName: front-pressed-lambda::cloudformation
           config: |
             stacks:
