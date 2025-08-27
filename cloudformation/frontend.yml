@@ -165,6 +165,7 @@ Resources:
             Timeout: 60
     EventSource:
         Type: AWS::Lambda::EventSourceMapping
+        DependsOn: ConsumeKinesisRole
         Properties:
             BatchSize: 8
             Enabled: true
